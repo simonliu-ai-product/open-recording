@@ -1,0 +1,62 @@
+{
+  "name": "@open-recording/mcp",
+  "version": "0.1.0",
+  "description": "MCP server for open-recording — lets any agent framework press record, stop, transcribe, and read back the transcript.",
+  "type": "module",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist",
+    "README.md"
+  ],
+  "scripts": {
+    "build": "tsdown",
+    "typecheck": "tsc --noEmit",
+    "prepack": "pnpm build"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "keywords": [
+    "mcp",
+    "model-context-protocol",
+    "recording",
+    "transcription",
+    "agent"
+  ],
+  "license": "MIT",
+  "author": {
+    "name": "Simon Liu",
+    "url": "https://github.com/LiuYuWei"
+  },
+  "homepage": "https://github.com/simonliu-ai-product/open-recording",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/simonliu-ai-product/open-recording.git",
+    "directory": "packages/mcp"
+  },
+  "bugs": {
+    "url": "https://github.com/simonliu-ai-product/open-recording/issues"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/node": "^2.0.0",
+    "@modelcontextprotocol/server": "^2.0.0",
+    "zod": "^4.4.3"
+  },
+  "peerDependencies": {
+    "@open-recording/core": "^0.1.0"
+  },
+  "devDependencies": {
+    "@open-recording/core": "workspace:*",
+    "@types/node": "^22.19.17",
+    "tsdown": "^0.22.14",
+    "typescript": "^5.9.3"
+  }
+}

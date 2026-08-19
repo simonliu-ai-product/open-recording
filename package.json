@@ -1,0 +1,32 @@
+{
+  "name": "open-recording-monorepo",
+  "private": true,
+  "version": "0.0.0",
+  "packageManager": "pnpm@11.9.0",
+  "scripts": {
+    "dev": "turbo run dev",
+    "dev:demo": "turbo run dev --filter=demo",
+    "build": "turbo run build",
+    "typecheck": "turbo run typecheck",
+    "format": "biome format --write .",
+    "format:check": "biome format .",
+    "lint": "biome lint .",
+    "lint:fix": "biome lint --write .",
+    "check": "biome check .",
+    "check:fix": "biome check --write .",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "core": "pnpm --filter @open-recording/core",
+    "mcp": "pnpm --filter @open-recording/mcp",
+    "changeset": "changeset",
+    "version-packages": "changeset version",
+    "release": "turbo run build --filter=@open-recording/core --filter=@open-recording/mcp && changeset publish"
+  },
+  "devDependencies": {
+    "@biomejs/biome": "2.5.7",
+    "@changesets/changelog-github": "^0.7.0",
+    "@changesets/cli": "^3.0.0",
+    "turbo": "^2.10.8",
+    "vitest": "^2.1.9"
+  }
+}

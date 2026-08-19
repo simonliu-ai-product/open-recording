@@ -1,0 +1,84 @@
+{
+  "name": "@open-recording/core",
+  "version": "0.1.0",
+  "description": "Runtime and CLI for open-recording — a browser recording studio an agent can drive, with local whisper.cpp transcription.",
+  "type": "module",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    },
+    "./ops": {
+      "types": "./dist/ops/index.d.ts",
+      "import": "./dist/ops/index.js"
+    },
+    "./vite": {
+      "types": "./dist/vite/index.d.ts",
+      "import": "./dist/vite/index.js"
+    }
+  },
+  "bin": {
+    "open-recording": "./bin.js"
+  },
+  "files": [
+    "bin.js",
+    "dist",
+    "src/app",
+    "README.md"
+  ],
+  "scripts": {
+    "build": "tsdown",
+    "typecheck": "tsc --noEmit",
+    "prepack": "pnpm build"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "keywords": [
+    "recording",
+    "audio",
+    "transcription",
+    "whisper",
+    "agent",
+    "vite"
+  ],
+  "license": "MIT",
+  "author": {
+    "name": "Simon Liu",
+    "url": "https://github.com/LiuYuWei"
+  },
+  "homepage": "https://github.com/simonliu-ai-product/open-recording",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/simonliu-ai-product/open-recording.git",
+    "directory": "packages/core"
+  },
+  "bugs": {
+    "url": "https://github.com/simonliu-ai-product/open-recording/issues"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "dependencies": {
+    "@tailwindcss/vite": "^4.3.3",
+    "@vitejs/plugin-react": "^6.0.5",
+    "chalk": "^6.0.0",
+    "clsx": "^2.1.1",
+    "commander": "^15.0.0",
+    "lucide-react": "^1.25.0",
+    "next-themes": "^0.4.6",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "react-router-dom": "^7.18.1",
+    "tailwind-merge": "^3.5.0",
+    "tailwindcss": "^4.2.2",
+    "vite": "^8.2.1"
+  },
+  "devDependencies": {
+    "@types/node": "^22.19.17",
+    "@types/react": "^18.3.12",
+    "@types/react-dom": "^18.3.1",
+    "tsdown": "^0.22.14",
+    "typescript": "^5.9.3"
+  }
+}
