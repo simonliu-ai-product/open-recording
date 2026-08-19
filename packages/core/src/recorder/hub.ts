@@ -24,6 +24,7 @@ export type StartCommand = {
 };
 
 export type StudioCommand =
+  | { type: 'hello'; studioId: number }
   | StartCommand
   | { type: 'pause'; sessionId: string }
   | { type: 'resume'; sessionId: string }
@@ -54,6 +55,8 @@ const IDLE: RecorderState = {
 export class RecorderHub {
   private state: RecorderState = { ...IDLE };
   private studios = new Map<number, Send>();
+  /** When each studio last took a microphone; the freshest one owns a session. */
+  private armedAt = new Map<number, number>();
   private watchers = new Set<(state: RecorderState) => void>();
   private counter = 0;
   private studioSeq = 0;
@@ -63,6 +66,7 @@ export class RecorderHub {
    * interleave a second WebM stream into it. Only the owner is told to record.
    */
   private owner: number | null = null;
+  private silenceTimer: ReturnType<typeof setTimeout> | null = null;
 
   snapshot(): RecorderState {
     return { ...this.state, studios: this.studios.size };
@@ -72,10 +76,13 @@ export class RecorderHub {
     this.studioSeq += 1;
     const id = this.studioSeq;
     this.studios.set(id, send);
+    // The page needs its own id to report that it holds a microphone.
+    send({ type: 'hello', studioId: id });
     send({ type: 'state', state: this.snapshot() });
     this.publish();
     return () => {
       this.studios.delete(id);
+      this.armedAt.delete(id);
       // A studio that vanishes mid-session takes the microphone with it: nothing
       // is being captured any more and no command can reach it. Leaving the
       // recorder "recording" would wedge the workspace — every later start
@@ -86,6 +93,17 @@ export class RecorderHub {
       }
       this.publish();
     };
+  }
+
+  /**
+   * A page reports taking a microphone. Permission is remembered per origin, so
+   * a tab left open days ago can still arm itself silently — which is why the
+   * freshest claim wins rather than the oldest connection.
+   */
+  markArmed(studioId: number, at: number): boolean {
+    if (!this.studios.has(studioId)) return false;
+    this.armedAt.set(studioId, at);
+    return true;
   }
 
   /** Sends to the studio that owns the open session, and to nobody else. */
@@ -126,7 +144,7 @@ export class RecorderHub {
       title: command.title,
       startedAt: new Date().toISOString(),
     };
-    this.owner = this.studios.keys().next().value ?? null;
+    this.owner = this.pickOwner();
     this.toOwner({ type: 'start', ...command });
     this.publish();
   }
@@ -137,6 +155,28 @@ export class RecorderHub {
    * from it. Splitting a meeting in two because someone stepped out is exactly
    * what a recorder should not make somebody deal with afterwards.
    */
+  private clearSilenceTimer(): void {
+    if (this.silenceTimer) clearTimeout(this.silenceTimer);
+    this.silenceTimer = null;
+  }
+
+  /** The most recently armed studio, or failing that the most recent connection. */
+  private pickOwner(): number | null {
+    let best: number | null = null;
+    let bestAt = -1;
+    for (const id of this.studios.keys()) {
+      const at = this.armedAt.get(id);
+      if (at !== undefined && at > bestAt) {
+        best = id;
+        bestAt = at;
+      }
+    }
+    if (best !== null) return best;
+    let last: number | null = null;
+    for (const id of this.studios.keys()) last = id;
+    return last;
+  }
+
   requestPause(): void {
     if (this.state.status !== 'recording') return;
     const sessionId = this.state.sessionId;
@@ -177,16 +217,32 @@ export class RecorderHub {
   }
 
   /** The studio confirms its MediaRecorder is running. */
-  ackRecording(sessionId: string): boolean {
+  ackRecording(sessionId: string, chunkMs = 5_000): boolean {
     if (this.state.sessionId !== sessionId) return false;
     if (this.state.status !== 'arming') return false;
     this.set({ status: 'recording', startedAt: new Date().toISOString() });
+
+    // A page can acknowledge and then produce nothing — a background tab that
+    // still holds permission, throttled to a standstill. Silence has to end the
+    // session with a reason rather than leave the workspace pinned to a
+    // recorder nobody is feeding.
+    this.silenceTimer = setTimeout(
+      () => {
+        if (this.state.sessionId === sessionId && this.state.bytes === 0) {
+          this.finish(sessionId, {
+            error: 'the studio acknowledged but sent no audio — another tab may be holding it',
+          });
+        }
+      },
+      Math.max(6_000, chunkMs * 4),
+    );
     return true;
   }
 
   /** `durationMs` is the audio actually captured, so it does not advance while paused. */
   noteProgress(sessionId: string, patch: { bytes?: number; durationMs?: number }): boolean {
     if (this.state.sessionId !== sessionId) return false;
+    if (patch.bytes) this.clearSilenceTimer();
     this.set({
       ...(patch.bytes !== undefined ? { bytes: patch.bytes } : {}),
       ...(patch.durationMs !== undefined ? { durationMs: patch.durationMs } : {}),
@@ -198,6 +254,7 @@ export class RecorderHub {
   finish(sessionId: string, outcome: { durationMs?: number; error?: string }): boolean {
     if (this.state.sessionId !== sessionId) return false;
     this.owner = null;
+    this.clearSilenceTimer();
     this.state = {
       ...IDLE,
       durationMs: outcome.durationMs ?? this.state.durationMs,
@@ -212,6 +269,7 @@ export class RecorderHub {
   abandon(sessionId: string, error: string): void {
     if (this.state.sessionId !== sessionId) return;
     this.owner = null;
+    this.clearSilenceTimer();
     this.state = { ...IDLE, error };
     this.publish();
   }

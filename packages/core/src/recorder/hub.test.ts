@@ -1,6 +1,13 @@
 import { describe, expect, it, vi } from 'vitest';
 import { RecorderHub, type StudioCommand } from './hub.ts';
 
+/** The hub introduces itself to each studio; the id is in that first message. */
+function idOf(_detach: () => void, received: StudioCommand[]): number {
+  const hello = received.find((c) => c.type === 'hello');
+  if (hello?.type !== 'hello') throw new Error('no hello');
+  return hello.studioId;
+}
+
 function armed() {
   const hub = new RecorderHub();
   const sent: StudioCommand[] = [];
@@ -108,10 +115,47 @@ describe('RecorderHub', () => {
     });
 
     // Two microphones appending to one file would interleave two WebM streams.
-    expect(first.filter((c) => c.type === 'start')).toHaveLength(1);
-    expect(second.filter((c) => c.type === 'start')).toHaveLength(0);
+    const starts = [...first, ...second].filter((c) => c.type === 'start');
+    expect(starts).toHaveLength(1);
     // Both still see the state, because both pages show the same recorder.
+    expect(first.some((c) => c.type === 'state')).toBe(true);
     expect(second.some((c) => c.type === 'state')).toBe(true);
+  });
+
+  it('gives the session to the studio that most recently took a microphone', () => {
+    const hub = new RecorderHub();
+    const stale: StudioCommand[] = [];
+    const fresh: StudioCommand[] = [];
+    const staleId = idOf(
+      hub.attachStudio((c) => stale.push(c)),
+      stale,
+    );
+    const freshId = idOf(
+      hub.attachStudio((c) => fresh.push(c)),
+      fresh,
+    );
+
+    // A tab left open days ago armed long ago; the one in front of the person
+    // armed a moment ago. Permission is per origin, so both can claim to hold a
+    // microphone — the freshest claim is the one that means anything.
+    hub.markArmed(staleId, 1_000);
+    hub.markArmed(freshId, 2_000);
+
+    hub.arm({
+      sessionId: 's1',
+      recordingId: '20260819-141530-sync',
+      title: 'Sync',
+      chunkMs: 5000,
+      maxDurationMs: 1000,
+    });
+
+    expect(fresh.filter((c) => c.type === 'start')).toHaveLength(1);
+    expect(stale.filter((c) => c.type === 'start')).toHaveLength(0);
+  });
+
+  it('refuses a microphone claim from a studio that is not connected', () => {
+    const hub = new RecorderHub();
+    expect(hub.markArmed(999, Date.now())).toBe(false);
   });
 
   it('resolves waitFor on a matching transition and rejects on timeout', async () => {

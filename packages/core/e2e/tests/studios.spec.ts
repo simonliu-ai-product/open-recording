@@ -41,6 +41,36 @@ test.describe('more than one studio page', () => {
     expect(decoded).toMatchObject({ ok: true });
   });
 
+  test('a tab left open in the background does not steal the recording', async ({
+    page,
+    context,
+  }) => {
+    // The stale tab: armed a while ago, then forgotten. Permission is
+    // remembered per origin, so it can still take a microphone silently.
+    const stale = await context.newPage();
+    await armedStudio(stale);
+
+    // The tab in front of the person, armed just now.
+    await armedStudio(page);
+    await expect.poll(async () => (await status(page)).studios).toBe(2);
+
+    await control(page, 'start', { title: 'Fresh tab wins' });
+    await expect.poll(async () => (await status(page)).status).toBe('recording');
+
+    // Audio has to actually arrive: the freshest studio is the one recording,
+    // and a session nobody feeds is exactly the failure this guards.
+    await expect
+      .poll(async () => (await status(page)).durationMs, { timeout: 10_000 })
+      .toBeGreaterThan(0);
+
+    await control(page, 'stop');
+    await expect.poll(async () => (await status(page)).status).toBe('idle');
+
+    const [id] = await listOnDisk();
+    expect(await audioSize(id)).toBeGreaterThan(1000);
+    await stale.close();
+  });
+
   test('every open page shows the same recorder', async ({ page, context }) => {
     await armedStudio(page);
     const watcher = await context.newPage();

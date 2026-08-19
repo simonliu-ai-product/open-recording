@@ -26,6 +26,7 @@ export type StudioState = {
 };
 
 type Command =
+  | { type: 'hello'; studioId: number }
   | {
       type: 'start';
       sessionId: string;
@@ -83,6 +84,7 @@ class Studio {
   private capturedMs = 0;
   private sessionId: string | null = null;
   private maxDurationMs = 0;
+  private studioId: number | null = null;
   /** Slices are appended server-side in arrival order, so uploads are chained, never parallel. */
   private uploads: Promise<void> = Promise.resolve();
 
@@ -113,6 +115,12 @@ class Studio {
 
   private async handle(command: Command): Promise<void> {
     switch (command.type) {
+      case 'hello':
+        this.studioId = command.studioId;
+        // A reconnect gets a new id, so a studio already holding a microphone
+        // has to claim it again or the server would forget which page is live.
+        if (this.stream) await this.claimMicrophone();
+        return;
       case 'state':
         this.set({ recorder: command.state });
         return;
@@ -148,11 +156,23 @@ class Studio {
       this.stream = stream;
       this.watchLevel(stream);
       this.set({ mic: 'armed', micError: null });
+      await this.claimMicrophone();
     } catch (err) {
       this.set({ mic: 'denied', micError: err instanceof Error ? err.message : String(err) });
       throw err;
     }
   };
+
+  /**
+   * Tells the server this page is holding a microphone now. Ownership goes to
+   * the freshest claim, so the tab someone just armed records rather than one
+   * left open in the background, which can still arm itself silently because
+   * permission is remembered per origin.
+   */
+  private async claimMicrophone(): Promise<void> {
+    if (this.studioId === null) return;
+    await this.post('/__studio/armed', { studioId: this.studioId });
+  }
 
   disarm = (): void => {
     this.stopLevelWatch();

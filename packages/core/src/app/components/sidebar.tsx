@@ -158,6 +158,13 @@ export function Sidebar({ counts, tags, selectedId, onSelect, state }: Props) {
             {state.connected ? 'connected' : 'offline'}
           </span>
         </div>
+        {/* Another page on this workspace can hold the microphone instead, and
+            that is worth seeing before pressing record rather than after. */}
+        {state.recorder.studios > 1 ? (
+          <div className="mt-2 px-2">
+            <span className="folio">{state.recorder.studios} studio tabs open</span>
+          </div>
+        ) : null}
       </div>
     </aside>
   );

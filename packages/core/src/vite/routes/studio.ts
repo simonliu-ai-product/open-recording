@@ -6,6 +6,7 @@ import { recorderHub, type StudioCommand } from '../../recorder/hub.ts';
 import { fail, json, readBody, readRawBody } from './context.ts';
 
 // GET  /__studio/stream                     SSE: recorder commands + state
+// POST /__studio/armed                      page reports it now holds a microphone
 // POST /__studio/sessions/:sessionId/ack    studio confirms its MediaRecorder is running
 // POST /__studio/sessions/:sessionId/chunk  one MediaRecorder slice (application/octet-stream)
 // POST /__studio/sessions/:sessionId/paused  studio confirms MediaRecorder.pause()
@@ -46,6 +47,14 @@ export function registerStudioRoutes(server: ViteDevServer, ctx: ApiContext): vo
         return;
       }
 
+      if (method === 'POST' && url.pathname === '/armed') {
+        const guard = validateMutationRequest(req, { requireJsonBody: true });
+        if (!guard.ok) return json(res, guard.status, { error: guard.error });
+        const body = (await readBody(req)) as { studioId?: unknown };
+        if (typeof body.studioId !== 'number') return json(res, 400, { error: 'invalid studioId' });
+        return json(res, hub.markArmed(body.studioId, Date.now()) ? 200 : 409, hub.snapshot());
+      }
+
       const match = url.pathname.match(
         /^\/sessions\/([A-Za-z0-9]+)\/(ack|chunk|paused|resumed|done)$/,
       );
@@ -81,7 +90,7 @@ export function registerStudioRoutes(server: ViteDevServer, ctx: ApiContext): vo
         }
 
         if (action === 'ack') {
-          const accepted = hub.ackRecording(sessionId);
+          const accepted = hub.ackRecording(sessionId, ctx.chunkMs);
           if (!accepted) {
             // Either the session moved on or the studio failed to open a
             // microphone; an error body is how the waiting caller learns why.
