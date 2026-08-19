@@ -43,7 +43,33 @@ export async function toWhisperWav(ffmpeg: string, input: string, output: string
   }
 }
 
-/** Audio length in milliseconds, or null when ffprobe is unavailable or the file is unreadable. */
+/**
+ * Length by decoding the file. MediaRecorder writes a live stream, so its WebM
+ * carries no duration in the header and ffprobe reports none — the only honest
+ * answer comes from playing it through.
+ */
+async function decodedDurationMs(ffmpeg: string, input: string): Promise<number | null> {
+  const result = await run(ffmpeg, ['-hide_banner', '-i', input, '-f', 'null', '-']).catch(
+    () => null,
+  );
+  return result ? lastReportedTimeMs(result.stderr) : null;
+}
+
+/** ffmpeg reports progress on stderr; the last `time=` it printed is the whole length. */
+export function lastReportedTimeMs(stderr: string): number | null {
+  const times = [...stderr.matchAll(/time=(\d+):(\d+):(\d+)\.(\d+)/g)];
+  const last = times[times.length - 1];
+  if (!last) return null;
+  const [, h, m, sec, frac] = last;
+  return (
+    Number(h) * 3_600_000 +
+    Number(m) * 60_000 +
+    Number(sec) * 1_000 +
+    Number(frac.padEnd(3, '0').slice(0, 3))
+  );
+}
+
+/** Audio length in milliseconds, or null when ffmpeg is unavailable or the file is unreadable. */
 export async function probeDurationMs(ffmpeg: string, input: string): Promise<number | null> {
   const ffprobe = ffmpeg.replace(/ffmpeg(\.exe)?$/, (m) => m.replace('ffmpeg', 'ffprobe'));
   try {
@@ -56,9 +82,11 @@ export async function probeDurationMs(ffmpeg: string, input: string): Promise<nu
       'default=noprint_wrappers=1:nokey=1',
       input,
     ]);
-    if (result.code !== 0) return null;
-    const seconds = Number.parseFloat(result.stdout.trim());
-    return Number.isFinite(seconds) ? Math.round(seconds * 1000) : null;
+    if (result.code === 0) {
+      const seconds = Number.parseFloat(result.stdout.trim());
+      if (Number.isFinite(seconds) && seconds > 0) return Math.round(seconds * 1000);
+    }
+    return await decodedDurationMs(ffmpeg, input);
   } catch {
     return null;
   }
