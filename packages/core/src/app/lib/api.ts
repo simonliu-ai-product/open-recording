@@ -90,6 +90,8 @@ export const api = {
   remove: (id: string) =>
     request<{ ok: true }>(`/__rec/recordings/${encodeURIComponent(id)}`, { method: 'DELETE' }),
   start: (body: { title?: string } = {}) => request<RecordingMeta>('/__rec/start', jsonInit(body)),
+  pause: () => request<{ status: string }>('/__rec/pause', { method: 'POST' }),
+  resume: () => request<{ status: string }>('/__rec/resume', { method: 'POST' }),
   stop: () => request<RecordingMeta>('/__rec/stop', { method: 'POST' }),
   cancel: () => request<{ ok: true }>('/__rec/cancel', { method: 'POST' }),
   environment: () => request<WhisperEnvironment>('/__rec/environment'),

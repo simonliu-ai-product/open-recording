@@ -1,4 +1,4 @@
-import { Mic, Square, X } from 'lucide-react';
+import { Mic, Pause, Play, Square, X } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { api, formatDuration } from '../lib/api';
 import type { StudioState } from '../lib/studio';
@@ -19,11 +19,20 @@ export function RecordControl({ state, onChanged }: Props) {
   const [elapsed, setElapsed] = useState(0);
 
   const recording = state.recorder.status === 'recording';
+  const paused = state.recorder.status === 'paused';
+  const open = recording || paused;
   const startedAt = state.recorder.startedAt;
+  const capturedMs = state.recorder.durationMs;
 
   useEffect(() => {
-    if (!recording || !startedAt) {
+    if (!open || !startedAt) {
       setElapsed(0);
+      return;
+    }
+    // Paused time is not in the file, so the clock stops with the recorder and
+    // shows the last figure the studio reported.
+    if (paused) {
+      setElapsed(capturedMs);
       return;
     }
     const started = new Date(startedAt).getTime();
@@ -31,7 +40,7 @@ export function RecordControl({ state, onChanged }: Props) {
     tick();
     const timer = window.setInterval(tick, 250);
     return () => window.clearInterval(timer);
-  }, [recording, startedAt]);
+  }, [open, paused, capturedMs, startedAt]);
 
   const act = async (fn: () => Promise<unknown>) => {
     setBusy(true);
@@ -56,26 +65,31 @@ export function RecordControl({ state, onChanged }: Props) {
           type="button"
           disabled={busy || pending}
           onClick={() =>
-            act(() =>
-              recording ? api.stop() : api.start(title.trim() ? { title: title.trim() } : {}),
-            )
+            act(() => (open ? api.stop() : api.start(title.trim() ? { title: title.trim() } : {})))
           }
           className={cn(
             'relative grid size-11 shrink-0 place-items-center rounded-full disabled:opacity-50',
             recording
               ? 'recording-ring bg-brand text-brand-foreground'
-              : 'bg-primary text-primary-foreground hover:opacity-90',
+              : paused
+                ? 'bg-brand/70 text-brand-foreground'
+                : 'bg-primary text-primary-foreground hover:opacity-90',
           )}
-          aria-label={recording ? 'Stop recording' : 'Start recording'}
+          aria-label={open ? 'Stop recording' : 'Start recording'}
         >
-          {recording ? <Square className="size-4 fill-current" /> : <Mic className="size-5" />}
+          {open ? <Square className="size-4 fill-current" /> : <Mic className="size-5" />}
         </button>
 
         <div className="min-w-0 flex-1">
-          {recording ? (
+          {open ? (
             <>
-              <p className="nums font-medium text-[19px] leading-tight tracking-tight">
+              <p className="nums flex items-center gap-2 font-medium text-[19px] leading-tight tracking-tight">
                 {formatDuration(elapsed)}
+                {paused ? (
+                  <span className="rounded-[3px] bg-muted px-1.5 py-0.5 font-medium text-[10px] text-muted-foreground uppercase tracking-widest">
+                    Paused
+                  </span>
+                ) : null}
               </p>
               <p className="folio mt-0.5 truncate">
                 {state.recorder.title} · {state.recorder.recordingId}
@@ -96,7 +110,10 @@ export function RecordControl({ state, onChanged }: Props) {
         {/* Only shown once a microphone is open: an idle meter is a row of
             dots that says nothing. */}
         <div
-          className={cn('flex h-8 shrink-0 items-end gap-[3px]', state.mic !== 'armed' && 'hidden')}
+          className={cn(
+            'flex h-8 shrink-0 items-end gap-[3px]',
+            (state.mic !== 'armed' || paused) && 'hidden',
+          )}
           aria-hidden
         >
           {BARS.map((bar) => (
@@ -111,7 +128,19 @@ export function RecordControl({ state, onChanged }: Props) {
           ))}
         </div>
 
-        {recording ? (
+        {open ? (
+          <button
+            type="button"
+            disabled={busy || pending}
+            onClick={() => act(() => (paused ? api.resume() : api.pause()))}
+            className="flex items-center gap-1.5 rounded-[6px] border border-border px-2.5 py-1.5 font-medium text-[12px] hover:bg-muted disabled:opacity-50"
+          >
+            {paused ? <Play className="size-3.5" /> : <Pause className="size-3.5" />}
+            {paused ? 'Resume' : 'Pause'}
+          </button>
+        ) : null}
+
+        {open ? (
           <button
             type="button"
             disabled={busy}

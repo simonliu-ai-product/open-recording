@@ -8,6 +8,8 @@ import { fail, json, readBody, readRawBody } from './context.ts';
 // GET  /__studio/stream                     SSE: recorder commands + state
 // POST /__studio/sessions/:sessionId/ack    studio confirms its MediaRecorder is running
 // POST /__studio/sessions/:sessionId/chunk  one MediaRecorder slice (application/octet-stream)
+// POST /__studio/sessions/:sessionId/paused  studio confirms MediaRecorder.pause()
+// POST /__studio/sessions/:sessionId/resumed studio confirms it is capturing again
 // POST /__studio/sessions/:sessionId/done   studio flushed everything; session closes
 
 /** One slice is `chunkMs` of Opus — 8 MB is far above that, and far below a memory problem. */
@@ -44,7 +46,9 @@ export function registerStudioRoutes(server: ViteDevServer, ctx: ApiContext): vo
         return;
       }
 
-      const match = url.pathname.match(/^\/sessions\/([A-Za-z0-9]+)\/(ack|chunk|done)$/);
+      const match = url.pathname.match(
+        /^\/sessions\/([A-Za-z0-9]+)\/(ack|chunk|paused|resumed|done)$/,
+      );
       if (method === 'POST' && match) {
         const [, sessionId, action] = match;
 
@@ -70,6 +74,11 @@ export function registerStudioRoutes(server: ViteDevServer, ctx: ApiContext): vo
         const guard = validateMutationRequest(req, { requireJsonBody: true });
         if (!guard.ok) return json(res, guard.status, { error: guard.error });
         const body = (await readBody(req)) as { error?: string; durationMs?: number };
+
+        if (action === 'paused' || action === 'resumed') {
+          const moved = action === 'paused' ? hub.ackPaused(sessionId) : hub.ackResumed(sessionId);
+          return json(res, moved ? 200 : 409, hub.snapshot());
+        }
 
         if (action === 'ack') {
           const accepted = hub.ackRecording(sessionId);

@@ -56,6 +56,64 @@ describe('RecorderHub', () => {
     expect(hub.snapshot()).toMatchObject({ status: 'idle', error: 'studio did not start' });
   });
 
+  it("pauses and resumes only on the studio's acknowledgement", () => {
+    const { hub, sent } = armed();
+    hub.ackRecording('s1');
+
+    hub.requestPause();
+    expect(sent.some((c) => c.type === 'pause')).toBe(true);
+    // The command is out, but nothing claims to be paused until the studio says so.
+    expect(hub.snapshot().status).toBe('recording');
+
+    expect(hub.ackPaused('s1')).toBe(true);
+    expect(hub.snapshot().status).toBe('paused');
+
+    hub.requestResume();
+    expect(hub.ackResumed('s1')).toBe(true);
+    expect(hub.snapshot().status).toBe('recording');
+  });
+
+  it('refuses a pause that does not match the state it is in', () => {
+    const { hub } = armed();
+    expect(hub.ackPaused('s1')).toBe(false);
+    hub.ackRecording('s1');
+    expect(hub.ackResumed('s1')).toBe(false);
+    expect(hub.ackPaused('other')).toBe(false);
+  });
+
+  it('stops straight from paused, without resuming first', () => {
+    const { hub, sent } = armed();
+    hub.ackRecording('s1');
+    hub.ackPaused('s1');
+
+    hub.requestStop();
+    expect(sent.some((c) => c.type === 'stop')).toBe(true);
+    expect(hub.finish('s1', { durationMs: 1200 })).toBe(true);
+    expect(hub.snapshot().status).toBe('idle');
+  });
+
+  it('tells one studio to record, never all of them', () => {
+    const hub = new RecorderHub();
+    const first: StudioCommand[] = [];
+    const second: StudioCommand[] = [];
+    hub.attachStudio((c) => first.push(c));
+    hub.attachStudio((c) => second.push(c));
+
+    hub.arm({
+      sessionId: 's1',
+      recordingId: '20260819-141530-sync',
+      title: 'Sync',
+      chunkMs: 5000,
+      maxDurationMs: 1000,
+    });
+
+    // Two microphones appending to one file would interleave two WebM streams.
+    expect(first.filter((c) => c.type === 'start')).toHaveLength(1);
+    expect(second.filter((c) => c.type === 'start')).toHaveLength(0);
+    // Both still see the state, because both pages show the same recorder.
+    expect(second.some((c) => c.type === 'state')).toBe(true);
+  });
+
   it('resolves waitFor on a matching transition and rejects on timeout', async () => {
     vi.useFakeTimers();
     try {

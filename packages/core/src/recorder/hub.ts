@@ -1,4 +1,4 @@
-export type RecorderStatus = 'idle' | 'arming' | 'recording' | 'stopping';
+export type RecorderStatus = 'idle' | 'arming' | 'recording' | 'paused' | 'stopping';
 
 export type RecorderState = {
   status: RecorderStatus;
@@ -25,6 +25,8 @@ export type StartCommand = {
 
 export type StudioCommand =
   | StartCommand
+  | { type: 'pause'; sessionId: string }
+  | { type: 'resume'; sessionId: string }
   | { type: 'stop'; sessionId: string }
   | { type: 'cancel'; sessionId: string }
   | { type: 'state'; state: RecorderState };
@@ -51,25 +53,45 @@ const IDLE: RecorderState = {
  */
 export class RecorderHub {
   private state: RecorderState = { ...IDLE };
-  private studios = new Set<Send>();
+  private studios = new Map<number, Send>();
   private watchers = new Set<(state: RecorderState) => void>();
   private counter = 0;
+  private studioSeq = 0;
+  /**
+   * The one studio a session belongs to. Slices are appended to a single file
+   * in arrival order, so a second page recording the same session would
+   * interleave a second WebM stream into it. Only the owner is told to record.
+   */
+  private owner: number | null = null;
 
   snapshot(): RecorderState {
     return { ...this.state, studios: this.studios.size };
   }
 
   attachStudio(send: Send): () => void {
-    this.studios.add(send);
+    this.studioSeq += 1;
+    const id = this.studioSeq;
+    this.studios.set(id, send);
     send({ type: 'state', state: this.snapshot() });
     this.publish();
     return () => {
-      this.studios.delete(send);
-      // A studio that vanishes mid-session takes the microphone with it. The
-      // session is left in place so the bytes already on disk are still
-      // finalizable, but callers can see there is nobody to stop.
+      this.studios.delete(id);
+      // A studio that vanishes mid-session takes the microphone with it: nothing
+      // is being captured any more and no command can reach it. Leaving the
+      // recorder "recording" would wedge the workspace — every later start
+      // refused as busy, with no page left to stop it — so the session ends here
+      // and whatever reached the disk is finalized by the caller that reaps it.
+      if (this.owner === id && this.state.sessionId) {
+        this.finish(this.state.sessionId, { error: 'the studio holding the microphone went away' });
+      }
       this.publish();
     };
+  }
+
+  /** Sends to the studio that owns the open session, and to nobody else. */
+  private toOwner(command: StudioCommand): void {
+    if (this.owner === null) return;
+    this.studios.get(this.owner)?.(command);
   }
 
   studioCount(): number {
@@ -84,7 +106,9 @@ export class RecorderHub {
   private publish(): void {
     const snapshot = this.snapshot();
     for (const watcher of this.watchers) watcher(snapshot);
-    for (const send of this.studios) send({ type: 'state', state: snapshot });
+    // State goes to every page — they all show the same recorder — while the
+    // commands that hold a microphone go only to the owner.
+    for (const send of this.studios.values()) send({ type: 'state', state: snapshot });
   }
 
   private set(patch: Partial<RecorderState>): void {
@@ -92,7 +116,7 @@ export class RecorderHub {
     this.publish();
   }
 
-  /** Moves to `arming` and tells every studio to open a microphone. */
+  /** Moves to `arming` and asks one studio — the longest-connected — to open a microphone. */
   arm(command: Omit<StartCommand, 'type'>): void {
     this.state = {
       ...IDLE,
@@ -102,22 +126,54 @@ export class RecorderHub {
       title: command.title,
       startedAt: new Date().toISOString(),
     };
-    for (const send of this.studios) send({ type: 'start', ...command });
+    this.owner = this.studios.keys().next().value ?? null;
+    this.toOwner({ type: 'start', ...command });
     this.publish();
+  }
+
+  /**
+   * Pause and resume are a real `MediaRecorder.pause()`, not a stop followed by
+   * a new session: one recording, one file, with the paused span simply absent
+   * from it. Splitting a meeting in two because someone stepped out is exactly
+   * what a recorder should not make somebody deal with afterwards.
+   */
+  requestPause(): void {
+    if (this.state.status !== 'recording') return;
+    const sessionId = this.state.sessionId;
+    if (sessionId) this.toOwner({ type: 'pause', sessionId });
+  }
+
+  requestResume(): void {
+    if (this.state.status !== 'paused') return;
+    const sessionId = this.state.sessionId;
+    if (sessionId) this.toOwner({ type: 'resume', sessionId });
+  }
+
+  /** The studio confirms it actually paused; until then nothing claims it did. */
+  ackPaused(sessionId: string): boolean {
+    if (this.state.sessionId !== sessionId || this.state.status !== 'recording') return false;
+    this.set({ status: 'paused' });
+    return true;
+  }
+
+  ackResumed(sessionId: string): boolean {
+    if (this.state.sessionId !== sessionId || this.state.status !== 'paused') return false;
+    this.set({ status: 'recording' });
+    return true;
   }
 
   requestStop(): void {
     if (this.state.status === 'idle') return;
     const sessionId = this.state.sessionId;
     this.set({ status: 'stopping' });
-    if (sessionId) for (const send of this.studios) send({ type: 'stop', sessionId });
+    if (sessionId) this.toOwner({ type: 'stop', sessionId });
   }
 
   requestCancel(): void {
     if (this.state.status === 'idle') return;
     const sessionId = this.state.sessionId;
     this.set({ status: 'stopping' });
-    if (sessionId) for (const send of this.studios) send({ type: 'cancel', sessionId });
+    if (sessionId) this.toOwner({ type: 'cancel', sessionId });
   }
 
   /** The studio confirms its MediaRecorder is running. */
@@ -128,6 +184,7 @@ export class RecorderHub {
     return true;
   }
 
+  /** `durationMs` is the audio actually captured, so it does not advance while paused. */
   noteProgress(sessionId: string, patch: { bytes?: number; durationMs?: number }): boolean {
     if (this.state.sessionId !== sessionId) return false;
     this.set({
@@ -140,6 +197,7 @@ export class RecorderHub {
   /** The studio has flushed its last slice; the session is over either way. */
   finish(sessionId: string, outcome: { durationMs?: number; error?: string }): boolean {
     if (this.state.sessionId !== sessionId) return false;
+    this.owner = null;
     this.state = {
       ...IDLE,
       durationMs: outcome.durationMs ?? this.state.durationMs,
@@ -153,6 +211,7 @@ export class RecorderHub {
   /** Drops a session the studio never acknowledged, so the workspace is usable again. */
   abandon(sessionId: string, error: string): void {
     if (this.state.sessionId !== sessionId) return;
+    this.owner = null;
     this.state = { ...IDLE, error };
     this.publish();
   }

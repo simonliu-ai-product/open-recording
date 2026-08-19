@@ -5,11 +5,13 @@ import {
   deleteRecording,
   listRecordings,
   OpsError,
+  pauseRecording,
   readNotes,
   readRecording,
   readTranscript,
   recorderStatus,
   renameRecording,
+  resumeRecording,
   searchTranscripts,
   startRecording,
   stopRecording,
@@ -57,7 +59,7 @@ export function registerTools(server: McpServer, ctx: ApiContext): void {
     {
       title: 'Recorder status',
       description:
-        'Whether anything is recording, and whether a studio page is connected to record through. Check this before starting.',
+        'Whether anything is recording or paused, and whether a studio page is connected to record through. Check this before starting.',
       inputSchema: z.object({}),
     },
     () => run(() => recorderStatus(ctx)),
@@ -90,7 +92,7 @@ export function registerTools(server: McpServer, ctx: ApiContext): void {
     {
       title: 'Stop recording',
       description:
-        'Stop the open recording and finalize the file. Pass transcribe to run whisper.cpp immediately — that blocks until the transcription finishes.',
+        'Stop the open recording and finalize the file — from paused too, with no need to resume first. Pass transcribe to run whisper.cpp immediately, which blocks until the transcription finishes.',
       inputSchema: z.object({
         transcribe: z.boolean().optional().describe('transcribe as soon as the audio lands'),
         language: z.string().optional().describe('language code for the transcription, or `auto`'),
@@ -105,6 +107,27 @@ export function registerTools(server: McpServer, ctx: ApiContext): void {
         });
         return { ...meta, transcript: result };
       }),
+  );
+
+  server.registerTool(
+    'pause_recording',
+    {
+      title: 'Pause recording',
+      description:
+        'Pause without closing the recording — the audio stays one file, with the paused span simply absent from it. Use this for an interruption; use stop_recording when the session is over.',
+      inputSchema: z.object({}),
+    },
+    () => run(() => pauseRecording(ctx)),
+  );
+
+  server.registerTool(
+    'resume_recording',
+    {
+      title: 'Resume recording',
+      description: 'Carry on capturing into the recording that is paused.',
+      inputSchema: z.object({}),
+    },
+    () => run(() => resumeRecording(ctx)),
   );
 
   server.registerTool(

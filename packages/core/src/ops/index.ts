@@ -32,7 +32,10 @@ export {
 } from './recordings.ts';
 export {
   cancelRecording,
+  pauseRecording,
+  reapAbandoned,
   recorderStatus,
+  resumeRecording,
   type StartRecordingOptions,
   startRecording,
   stopRecording,

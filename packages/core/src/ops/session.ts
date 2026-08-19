@@ -6,6 +6,7 @@ import {
   AUDIO_FILE,
   deleteRecordingDir,
   ensureRecordingsRoot,
+  listRecordingIds,
   newRecordingId,
   patchMeta,
   type RecordingMeta,
@@ -43,11 +44,30 @@ export function recorderStatus(ctx: ApiContext): RecorderState {
  * MediaRecorder is running, so a caller never gets an "ok" for a recording that
  * is not actually being made.
  */
+/**
+ * Closes the books on a recording whose session ended without anyone stopping
+ * it — a studio tab closed mid-take. The bytes it captured are real, so the
+ * file is finalized rather than discarded, and the workspace is usable again.
+ */
+export async function reapAbandoned(ctx: ApiContext): Promise<string[]> {
+  const open = recorderHub(ctx.userCwd).snapshot().recordingId;
+  const reaped: string[] = [];
+  for (const id of await listRecordingIds(ctx)) {
+    if (id === open) continue;
+    const meta = await readMeta(ctx, id);
+    if (meta?.status !== 'recording') continue;
+    await finalize(ctx, id, recorderHub(ctx.userCwd).snapshot());
+    reaped.push(id);
+  }
+  return reaped;
+}
+
 export async function startRecording(
   ctx: ApiContext,
   opts: StartRecordingOptions = {},
 ): Promise<RecordingMeta> {
   const hub = recorderHub(ctx.userCwd);
+  await reapAbandoned(ctx);
   const state = hub.snapshot();
   if (state.status !== 'idle') {
     throw new OpsError(
@@ -142,6 +162,7 @@ export async function stopRecording(ctx: ApiContext): Promise<RecordingMeta> {
   const id = state.recordingId;
   const sessionId = state.sessionId;
 
+  // A paused recorder stops from where it is; there is no need to resume first.
   hub.requestStop();
   try {
     await hub.waitFor((s) => s.sessionId === null || s.sessionId !== sessionId, STOP_TIMEOUT_MS);
@@ -152,6 +173,53 @@ export async function stopRecording(ctx: ApiContext): Promise<RecordingMeta> {
   }
 
   return await finalize(ctx, id, hub.snapshot());
+}
+
+/** How long a studio gets to confirm a pause or a resume. */
+const TOGGLE_TIMEOUT_MS = 10_000;
+
+async function toggle(
+  ctx: ApiContext,
+  from: 'recording' | 'paused',
+  to: 'paused' | 'recording',
+): Promise<RecorderState> {
+  const hub = recorderHub(ctx.userCwd);
+  const state = hub.snapshot();
+  if (state.status !== from) {
+    throw new OpsError(
+      409,
+      state.status === to
+        ? `already ${to}`
+        : `cannot ${to === 'paused' ? 'pause' : 'resume'} while ${state.status}`,
+    );
+  }
+  const sessionId = state.sessionId;
+
+  if (to === 'paused') hub.requestPause();
+  else hub.requestResume();
+
+  try {
+    await hub.waitFor((s) => s.status === to || s.sessionId !== sessionId, TOGGLE_TIMEOUT_MS);
+  } catch {
+    throw new OpsError(
+      504,
+      `the studio did not confirm the ${to === 'paused' ? 'pause' : 'resume'}`,
+    );
+  }
+  return hub.snapshot();
+}
+
+/**
+ * Pauses without closing the recording. The audio stays one file — the paused
+ * span is simply absent from it — so a meeting interrupted halfway does not
+ * become two recordings to reconcile afterwards.
+ */
+export async function pauseRecording(ctx: ApiContext): Promise<RecorderState> {
+  return await toggle(ctx, 'recording', 'paused');
+}
+
+export async function resumeRecording(ctx: ApiContext): Promise<RecorderState> {
+  return await toggle(ctx, 'paused', 'recording');
 }
 
 /** Stops the open session and throws the audio away. */

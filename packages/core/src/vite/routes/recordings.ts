@@ -17,7 +17,9 @@ import {
 } from '../../ops/recordings.ts';
 import {
   cancelRecording,
+  pauseRecording,
   recorderStatus,
+  resumeRecording,
   startRecording,
   stopRecording,
 } from '../../ops/session.ts';
@@ -27,6 +29,8 @@ import { fail, json, readBody } from './context.ts';
 // GET    /__rec/status                 recorder state machine snapshot
 // GET    /__rec/environment            whisper + ffmpeg availability
 // POST   /__rec/start                  { title?, tags?, note? }
+// POST   /__rec/pause
+// POST   /__rec/resume
 // POST   /__rec/stop
 // POST   /__rec/cancel
 // GET    /__rec/search?q=&limit=      substring search across transcripts
@@ -53,13 +57,13 @@ export function registerRecordingRoutes(server: ViteDevServer, ctx: ApiContext):
         return json(res, 200, await transcribeEnvironment(ctx));
       }
 
-      if (
-        method === 'POST' &&
-        (url.pathname === '/start' || url.pathname === '/stop' || url.pathname === '/cancel')
-      ) {
+      const CONTROL = ['/start', '/pause', '/resume', '/stop', '/cancel'];
+      if (method === 'POST' && CONTROL.includes(url.pathname)) {
         const guard = validateMutationRequest(req);
         if (!guard.ok) return json(res, guard.status, { error: guard.error });
 
+        if (url.pathname === '/pause') return json(res, 200, await pauseRecording(ctx));
+        if (url.pathname === '/resume') return json(res, 200, await resumeRecording(ctx));
         if (url.pathname === '/stop') return json(res, 200, await stopRecording(ctx));
         if (url.pathname === '/cancel') return json(res, 200, await cancelRecording(ctx));
 

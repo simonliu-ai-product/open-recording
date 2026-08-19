@@ -1,6 +1,6 @@
 import studioConfig from 'virtual:open-recording/config';
 
-export type RecorderStatus = 'idle' | 'arming' | 'recording' | 'stopping';
+export type RecorderStatus = 'idle' | 'arming' | 'recording' | 'paused' | 'stopping';
 
 export type RecorderState = {
   status: RecorderStatus;
@@ -34,6 +34,8 @@ type Command =
       chunkMs: number;
       maxDurationMs: number;
     }
+  | { type: 'pause'; sessionId: string }
+  | { type: 'resume'; sessionId: string }
   | { type: 'stop'; sessionId: string }
   | { type: 'cancel'; sessionId: string }
   | { type: 'state'; state: RecorderState };
@@ -76,8 +78,11 @@ class Studio {
   private audioContext: AudioContext | null = null;
   private levelTimer: number | null = null;
   private stopTimer: number | null = null;
-  private startedAt = 0;
+  /** Start of the current run of capture, and what earlier runs already added up to. */
+  private segmentStartedAt = 0;
+  private capturedMs = 0;
   private sessionId: string | null = null;
+  private maxDurationMs = 0;
   /** Slices are appended server-side in arrival order, so uploads are chained, never parallel. */
   private uploads: Promise<void> = Promise.resolve();
 
@@ -113,6 +118,12 @@ class Studio {
         return;
       case 'start':
         await this.beginRecording(command);
+        return;
+      case 'pause':
+        this.pauseRecording(command.sessionId);
+        return;
+      case 'resume':
+        this.resumeRecording(command.sessionId);
         return;
       case 'stop':
         this.endRecording(command.sessionId, false);
@@ -176,12 +187,18 @@ class Studio {
     this.audioContext = null;
   }
 
-  private async post(path: string, body?: unknown): Promise<void> {
-    await fetch(path, {
+  /**
+   * Always sends a JSON body, even an empty one: these endpoints refuse a
+   * mutation that does not declare `application/json`, and a bodyless POST
+   * carries no content type at all — which is how every acknowledgement used to
+   * come back 415, leaving the server waiting for a studio that had in fact
+   * started.
+   */
+  private async post(path: string, body?: unknown): Promise<Response> {
+    return await fetch(path, {
       method: 'POST',
-      ...(body === undefined
-        ? {}
-        : { headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) }),
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify(body ?? {}),
     });
   }
 
@@ -195,11 +212,12 @@ class Studio {
       const mimeType = pickMimeType();
       const recorder = new MediaRecorder(stream, mimeType ? { mimeType } : undefined);
       this.recorder = recorder;
-      this.startedAt = Date.now();
+      this.segmentStartedAt = Date.now();
+      this.capturedMs = 0;
 
       recorder.ondataavailable = (event) => {
         if (event.data.size === 0) return;
-        const elapsed = Date.now() - this.startedAt;
+        const elapsed = this.capturedSoFar();
         this.uploads = this.uploads.then(async () => {
           await fetch(`/__studio/sessions/${command.sessionId}/chunk?durationMs=${elapsed}`, {
             method: 'POST',
@@ -211,13 +229,14 @@ class Studio {
         this.endRecording(command.sessionId, false, 'MediaRecorder error');
       };
       recorder.onstop = () => {
-        const durationMs = Date.now() - this.startedAt;
+        const durationMs = this.capturedSoFar();
         this.uploads = this.uploads.then(async () => {
           await this.post(`/__studio/sessions/${command.sessionId}/done`, { durationMs });
         });
       };
 
       recorder.start(command.chunkMs);
+      this.maxDurationMs = command.maxDurationMs;
       // A session nobody stops would fill the disk; the studio stops itself.
       this.stopTimer = window.setTimeout(
         () => this.endRecording(command.sessionId, false),
@@ -230,6 +249,39 @@ class Studio {
       await this.post(`/__studio/sessions/${command.sessionId}/ack`, { error: message });
       this.sessionId = null;
     }
+  }
+
+  /** Audio actually captured: paused time is not in the file, so it is not counted. */
+  private capturedSoFar(): number {
+    const running = this.segmentStartedAt === 0 ? 0 : Date.now() - this.segmentStartedAt;
+    return this.capturedMs + running;
+  }
+
+  private pauseRecording(sessionId: string): void {
+    const recorder = this.recorder;
+    if (this.sessionId !== sessionId || !recorder || recorder.state !== 'recording') return;
+    recorder.pause();
+    this.capturedMs = this.capturedSoFar();
+    this.segmentStartedAt = 0;
+    // The self-stop deadline is about how much audio a session may hold, so it
+    // does not run down while nothing is being captured.
+    if (this.stopTimer !== null) window.clearTimeout(this.stopTimer);
+    this.stopTimer = null;
+    void this.post(`/__studio/sessions/${sessionId}/paused`);
+  }
+
+  private resumeRecording(sessionId: string): void {
+    const recorder = this.recorder;
+    if (this.sessionId !== sessionId || !recorder || recorder.state !== 'paused') return;
+    recorder.resume();
+    this.segmentStartedAt = Date.now();
+    if (this.maxDurationMs > 0) {
+      this.stopTimer = window.setTimeout(
+        () => this.endRecording(sessionId, false),
+        Math.max(0, this.maxDurationMs - this.capturedMs),
+      );
+    }
+    void this.post(`/__studio/sessions/${sessionId}/resumed`);
   }
 
   private endRecording(sessionId: string, discard: boolean, error?: string): void {

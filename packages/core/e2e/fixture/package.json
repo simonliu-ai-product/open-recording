@@ -1,0 +1,9 @@
+{
+  "name": "open-recording-e2e-fixture",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "dependencies": {
+    "@open-recording/core": "workspace:*"
+  }
+}
