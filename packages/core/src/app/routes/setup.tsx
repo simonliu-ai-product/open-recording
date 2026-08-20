@@ -44,7 +44,8 @@ export function SetupPage() {
     );
   }
 
-  const ready = Boolean(env.bin && env.model && env.ffmpeg);
+  const ready =
+    Boolean(env.bin && env.model && env.ffmpeg) && (env.script === 'as-is' || env.scriptConverter);
 
   return (
     <div className="mx-auto max-w-[760px]">
@@ -66,6 +67,13 @@ export function SetupPage() {
           value={env.model}
           hint={`no ggml model found in ${env.modelSearchDirs[0]}`}
         />
+        {env.script === 'as-is' ? null : (
+          <Row
+            label={`Script — ${env.script}`}
+            value={env.scriptConverter ? 'opencc-js' : null}
+            hint="not installed — pnpm add -D opencc-js"
+          />
+        )}
       </ul>
 
       {ready ? (

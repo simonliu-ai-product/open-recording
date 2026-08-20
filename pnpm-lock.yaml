@@ -33,6 +33,9 @@ importers:
       '@open-recording/mcp':
         specifier: workspace:*
         version: link:../../packages/mcp
+      opencc-js:
+        specifier: ^1.4.1
+        version: 1.4.1
       typescript:
         specifier: ^5.9.3
         version: 5.9.3
@@ -1391,6 +1394,9 @@ packages:
     resolution: {integrity: sha512-4a+OsYv9UktOJKE+l1A4OufDgdRF9PifWj+tJnHURo/P+WOxpG4GzUFL9qCalmWauao6ogiG+QvnCovwPoyAWA==}
     engines: {node: '>=12.20.0'}
 
+  opencc-js@1.4.1:
+    resolution: {integrity: sha512-2lPLcrg7cnh1ATSduOxhnk/jq6KlR6w+5Ihl4wF7Z5e5Rva4vxTyugV5rZ7EiUCOZl+EDOLetIix+BhgYDCC+A==}
+
   package-manager-detector@1.8.0:
     resolution: {integrity: sha512-yQA4H19AmPEoMUeavPMDIe1higySl/gH/yaQrkT/s07Qp+7pp2hYz30N3z2l5BkjVkF9Ow6o0wjJamm2y7Sn0A==}
 
@@ -2651,6 +2657,8 @@ snapshots:
       whatwg-url: 5.0.0
 
   obug@2.1.4: {}
+
+  opencc-js@1.4.1: {}
 
   package-manager-detector@1.8.0: {}
 

@@ -10,6 +10,7 @@ import {
   type Transcript,
   WAV_FILE,
 } from '../files/store.ts';
+import { ScriptConversionUnavailableError, scriptConversionAvailable } from '../stt/script.ts';
 import {
   inspectEnvironment,
   toMarkdown,
@@ -36,8 +37,18 @@ export type TranscribeResult = {
   markdown: string;
 };
 
-export async function transcribeEnvironment(ctx: ApiContext): Promise<WhisperEnvironment> {
-  return await inspectEnvironment(ctx.transcribe, ctx.userCwd);
+export type TranscribeEnvironment = WhisperEnvironment & {
+  /** Which script transcripts are written in, and whether that is possible. */
+  script: 'traditional' | 'simplified' | 'as-is';
+  scriptConverter: boolean;
+};
+
+export async function transcribeEnvironment(ctx: ApiContext): Promise<TranscribeEnvironment> {
+  return {
+    ...(await inspectEnvironment(ctx.transcribe, ctx.userCwd)),
+    script: ctx.transcribe.script ?? 'as-is',
+    scriptConverter: await scriptConversionAvailable(ctx.userCwd),
+  };
 }
 
 export async function transcribeRecording(
@@ -73,6 +84,9 @@ export async function transcribeRecording(
       ...(opts.keepWav !== undefined ? { keepWav: opts.keepWav } : {}),
     });
   } catch (err) {
+    if (err instanceof ScriptConversionUnavailableError) {
+      throw new OpsError(503, `${err.message} (run \`open-recording doctor\`)`);
+    }
     if (err instanceof WhisperUnavailableError) {
       // A missing binary or model is a setup problem, not a bad request — it is
       // reported as one so `open-recording doctor` is the obvious next step.

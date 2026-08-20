@@ -13,6 +13,18 @@ export type TranscribeConfig = {
   ffmpeg?: string;
   /** Transcribe automatically when a recording stops. Defaults to false. */
   auto?: boolean;
+  /**
+   * Which Chinese script the transcript is written in. Whisper produces
+   * Simplified whatever was spoken, so `traditional` is what a Taiwanese
+   * workspace wants. Needs `opencc-js` installed. Defaults to `as-is`.
+   */
+  script?: 'traditional' | 'simplified' | 'as-is';
+  /**
+   * Initial prompt for whisper — useful for proper nouns it keeps mishearing.
+   * Note that prompting also pushes it towards one long segment, losing the
+   * per-line timestamps.
+   */
+  prompt?: string;
 };
 
 export type OpenRecordingConfig = {

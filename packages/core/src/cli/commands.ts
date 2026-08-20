@@ -111,7 +111,18 @@ export async function doctorCommand(): Promise<void> {
       ),
   );
 
-  const ready = Boolean(env.ffmpeg && env.bin && env.model);
+  if (env.script !== 'as-is') {
+    line(
+      env.scriptConverter,
+      'script',
+      env.scriptConverter
+        ? `${env.script} (opencc-js)`
+        : chalk.dim(`transcripts are set to ${env.script} — pnpm add -D opencc-js`),
+    );
+  }
+
+  const ready =
+    Boolean(env.ffmpeg && env.bin && env.model) && (env.script === 'as-is' || env.scriptConverter);
   process.stdout.write(
     ready
       ? `\n${chalk.green('Ready')} — recordings can be transcribed locally.\n`

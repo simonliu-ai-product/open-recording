@@ -51,6 +51,8 @@ export type WhisperEnvironment = {
   model: string | null;
   ffmpeg: string | null;
   modelSearchDirs: string[];
+  script: 'traditional' | 'simplified' | 'as-is';
+  scriptConverter: boolean;
 };
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {

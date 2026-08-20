@@ -13,6 +13,7 @@
   },
   "devDependencies": {
     "@open-recording/mcp": "workspace:*",
+    "opencc-js": "^1.4.1",
     "typescript": "^5.9.3"
   }
 }

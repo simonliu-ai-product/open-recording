@@ -5,6 +5,7 @@ import path from 'node:path';
 import { run, toWhisperWav } from '../audio/ffmpeg.ts';
 import type { TranscribeConfig } from '../config.ts';
 import type { Transcript, TranscriptSegment } from '../files/store.ts';
+import { loadConverter } from './script.ts';
 
 const BIN_CANDIDATES = ['whisper-cli', 'whisper-cpp', 'main'];
 
@@ -190,6 +191,12 @@ export async function transcribeFile(opts: TranscribeFileOptions): Promise<Trans
 
   const prefix = opts.wavPath.replace(/\.wav$/, '');
   const language = opts.language ?? opts.config.language ?? 'auto';
+  const script = opts.config.script ?? 'as-is';
+  const prompt = opts.config.prompt;
+  // Loaded before whisper runs: a transcript that cannot be converted should
+  // fail before spending a minute producing one in the wrong script.
+  const convert = await loadConverter(opts.userCwd, script);
+
   const args = [
     '-m',
     model,
@@ -201,6 +208,9 @@ export async function transcribeFile(opts: TranscribeFileOptions): Promise<Trans
     '-of',
     prefix,
     '-np',
+    // Only when asked for: a prompt steers vocabulary, but it also pushes
+    // whisper towards returning the recording as one long segment.
+    ...(prompt ? ['--prompt', prompt] : []),
     ...(opts.config.threads ? ['-t', String(opts.config.threads)] : []),
     ...(opts.config.extraArgs ?? []),
   ];
@@ -213,7 +223,10 @@ export async function transcribeFile(opts: TranscribeFileOptions): Promise<Trans
 
   const jsonPath = `${prefix}.json`;
   const raw = await readFile(jsonPath, 'utf8');
-  const { language: detected, segments } = parseWhisperJson(raw);
+  const { language: detected, segments: parsed } = parseWhisperJson(raw);
+  const segments = convert
+    ? parsed.map((segment) => ({ ...segment, text: convert(segment.text) }))
+    : parsed;
   await unlink(jsonPath).catch(() => {});
   if (!opts.keepWav) await unlink(opts.wavPath).catch(() => {});
 

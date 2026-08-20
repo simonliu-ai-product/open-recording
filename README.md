@@ -73,6 +73,28 @@ recordings/
 
 No database, no index. The filesystem is the truth, and ids sort chronologically.
 
+## Chinese transcripts come out Traditional if you ask
+
+Whisper writes Simplified Chinese whatever was spoken — its training data is
+overwhelmingly Simplified — so a meeting in Taipei is transcribed into a script
+nobody in the room writes. Set the script and install the converter:
+
+```bash
+pnpm add -D opencc-js
+```
+
+```ts
+transcribe: { script: 'traditional' }
+```
+
+Conversion is phrase-aware (`软件` becomes `軟體`, not `軟件`) and happens after
+whisper, so the per-line timestamps survive. Prompting whisper towards
+Traditional instead does work, but it also makes it return the whole recording
+as one segment — which is why this converts rather than prompts.
+
+Transcription is refused, rather than silently written in the wrong script, if
+`script` is set and the converter is missing.
+
 ## Configuration
 
 `open-recording.config.ts` in your workspace:
