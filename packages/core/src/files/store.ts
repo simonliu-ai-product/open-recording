@@ -6,6 +6,9 @@ export const RECORDING_ID_RE = /^[a-z0-9][a-z0-9-]{0,80}$/;
 
 export type RecordingStatus = 'recording' | 'ready' | 'failed';
 
+/** What was captured: a microphone, or a browser tab with its picture. */
+export type RecordingKind = 'audio' | 'screen';
+
 export type TranscriptSegment = {
   /** Milliseconds from the start of the recording. */
   start: number;
@@ -32,6 +35,9 @@ export type RecordingMeta = {
   durationMs: number;
   sizeBytes: number;
   mimeType: string;
+  kind: RecordingKind;
+  /** Name of the captured file inside the recording's directory. */
+  file: string;
   tags: string[];
   /** Who pressed record — an agent tool call or a person in the studio UI. */
   source: 'agent' | 'studio';
@@ -83,10 +89,21 @@ export function newRecordingId(title: string, now: Date): string {
 }
 
 export const AUDIO_FILE = 'audio.webm';
+export const SCREEN_FILE = 'screen.webm';
+
+/**
+ * The captured file for a recording. `meta.file` is authoritative — recordings
+ * made before screens were captured have no such field and are audio.
+ */
+export function mediaFileName(meta: Pick<RecordingMeta, 'kind' | 'file'>): string {
+  return meta.file ?? (meta.kind === 'screen' ? SCREEN_FILE : AUDIO_FILE);
+}
 export const WAV_FILE = 'audio.wav';
 export const META_FILE = 'meta.json';
 export const TRANSCRIPT_FILE = 'transcript.json';
 export const TRANSCRIPT_MD_FILE = 'transcript.md';
+export const SUBTITLE_SRT_FILE = 'transcript.srt';
+export const SUBTITLE_VTT_FILE = 'transcript.vtt';
 export const NOTES_FILE = 'notes.md';
 
 export async function ensureRecordingsRoot(roots: RecordingRoots): Promise<void> {
@@ -150,9 +167,10 @@ export function recordingFile(roots: RecordingRoots, id: string, name: string): 
 export async function appendChunk(
   roots: RecordingRoots,
   id: string,
+  name: string,
   chunk: Buffer,
 ): Promise<number> {
-  const file = recordingFile(roots, id, AUDIO_FILE);
+  const file = recordingFile(roots, id, name);
   if (!file) throw new Error(`invalid recording id: ${id}`);
   await mkdir(path.dirname(file), { recursive: true });
   await new Promise<void>((resolve, reject) => {

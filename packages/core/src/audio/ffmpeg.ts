@@ -30,6 +30,8 @@ export async function toWhisperWav(ffmpeg: string, input: string, output: string
     'error',
     '-i',
     input,
+    // A screen recording carries a video track whisper has no use for.
+    '-vn',
     '-ar',
     '16000',
     '-ac',

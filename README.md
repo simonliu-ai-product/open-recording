@@ -73,6 +73,23 @@ recordings/
 
 No database, no index. The filesystem is the truth, and ids sort chronologically.
 
+## Recording a browser tab
+
+Press **Record a tab** in the sidebar and pick one. You get its picture and, if
+you tick *Also share tab audio*, its sound — one `screen.webm`, transcribed and
+subtitled like any other recording.
+
+Picking the tab is a person's job: Chrome will not let a script choose a capture
+surface, and unlike the microphone it does not remember the choice. Once picked,
+the stream stays and an agent can start, pause, and stop it as usual.
+
+On macOS Chrome shares audio for a **tab** only — not for a window and not for
+the whole screen. A tab shared without audio still records the picture; the
+studio says so rather than leaving you to find an empty transcript.
+
+Transcribing writes `transcript.srt` and `transcript.vtt` beside the audio, and
+the player loads the cues, so a screen recording plays with subtitles.
+
 ## Chinese transcripts come out Traditional if you ask
 
 Whisper writes Simplified Chinese whatever was spoken — its training data is

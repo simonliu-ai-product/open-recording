@@ -7,11 +7,13 @@ import {
   deleteRecordingDir,
   ensureRecordingsRoot,
   listRecordingIds,
+  mediaFileName,
   newRecordingId,
   patchMeta,
   type RecordingMeta,
   readMeta,
   recordingFile,
+  SCREEN_FILE,
   writeMeta,
 } from '../files/store.ts';
 import { type RecorderState, recorderHub } from '../recorder/hub.ts';
@@ -102,6 +104,9 @@ export async function startRecording(
     durationMs: 0,
     sizeBytes: 0,
     mimeType: 'audio/webm',
+    // Corrected from the studio's acknowledgement, which knows what it took.
+    kind: 'audio',
+    file: AUDIO_FILE,
     tags: opts.tags?.map((t) => t.trim()).filter(Boolean) ?? [],
     source: opts.source ?? 'agent',
     ...(opts.note ? { note: opts.note } : {}),
@@ -133,11 +138,18 @@ export async function startRecording(
     await deleteRecordingDir(ctx, id);
     throw new OpsError(500, after.error ?? 'recording failed to start');
   }
-  return (await readMeta(ctx, id)) ?? meta;
+  const kind = hub.snapshot().kind;
+  const settled = await patchMeta(ctx, id, {
+    kind,
+    file: kind === 'screen' ? SCREEN_FILE : AUDIO_FILE,
+    mimeType: kind === 'screen' ? 'video/webm' : 'audio/webm',
+  });
+  return settled ?? meta;
 }
 
 async function finalize(ctx: ApiContext, id: string, state: RecorderState): Promise<RecordingMeta> {
-  const file = recordingFile(ctx, id, AUDIO_FILE);
+  const current = await readMeta(ctx, id);
+  const file = recordingFile(ctx, id, current ? mediaFileName(current) : AUDIO_FILE);
   const sizeBytes = file && existsSync(file) ? (await stat(file)).size : 0;
   const probed =
     file && sizeBytes > 0 ? await probeDurationMs(ctx.transcribe.ffmpeg ?? 'ffmpeg', file) : null;

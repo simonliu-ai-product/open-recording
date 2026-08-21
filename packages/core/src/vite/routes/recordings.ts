@@ -4,11 +4,12 @@ import type { ViteDevServer } from 'vite';
 import { validateMutationRequest } from '../../http/request-guard.ts';
 import type { ApiContext } from '../../ops/context.ts';
 import {
-  audioPath,
   deleteRecording,
   listRecordings,
+  mediaPath,
   readNotes,
   readRecording,
+  readSubtitles,
   readTranscript,
   renameRecording,
   searchTranscripts,
@@ -36,7 +37,8 @@ import { fail, json, readBody } from './context.ts';
 // GET    /__rec/search?q=&limit=      substring search across transcripts
 // GET    /__rec/recordings             list
 // GET    /__rec/recordings/:id         meta
-// GET    /__rec/recordings/:id/audio   the webm, range-less but seekable enough for <audio>
+// GET    /__rec/recordings/:id/audio   the captured webm, with byte ranges so it seeks
+// GET    /__rec/recordings/:id/subtitles.vtt  cues a <video> can load directly
 // GET    /__rec/recordings/:id/transcript?view=markdown|text|segments
 // GET    /__rec/recordings/:id/notes       agent-written Markdown beside the audio
 // POST   /__rec/recordings/:id/transcribe  { language?, model?, force? }
@@ -99,9 +101,11 @@ export function registerRecordingRoutes(server: ViteDevServer, ctx: ApiContext):
 
       const audioMatch = url.pathname.match(/^\/recordings\/([^/]+)\/audio$/);
       if (method === 'GET' && audioMatch) {
-        const file = audioPath(ctx, decodeURIComponent(audioMatch[1]));
+        const id = decodeURIComponent(audioMatch[1]);
+        const file = await mediaPath(ctx, id);
         const info = await stat(file);
-        res.setHeader('content-type', 'audio/webm');
+        const meta = await readRecording(ctx, id);
+        res.setHeader('content-type', meta.kind === 'screen' ? 'video/webm' : 'audio/webm');
         res.setHeader('cache-control', 'no-store');
         // Without byte ranges a browser cannot seek, and Chrome will not even
         // report a duration for the stream — a recording you cannot scrub is
@@ -130,6 +134,16 @@ export function registerRecordingRoutes(server: ViteDevServer, ctx: ApiContext):
         res.statusCode = 200;
         res.setHeader('content-length', String(info.size));
         createReadStream(file).pipe(res);
+        return;
+      }
+
+      const vttMatch = url.pathname.match(/^\/recordings\/([^/]+)\/subtitles\.vtt$/);
+      if (method === 'GET' && vttMatch) {
+        const text = await readSubtitles(ctx, decodeURIComponent(vttMatch[1]), 'vtt');
+        res.statusCode = 200;
+        res.setHeader('content-type', 'text/vtt; charset=utf-8');
+        res.setHeader('cache-control', 'no-store');
+        res.end(text);
         return;
       }
 

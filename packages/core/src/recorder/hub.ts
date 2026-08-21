@@ -2,6 +2,8 @@ export type RecorderStatus = 'idle' | 'arming' | 'recording' | 'paused' | 'stopp
 
 export type RecorderState = {
   status: RecorderStatus;
+  /** What the owning studio is capturing. */
+  kind: 'audio' | 'screen';
   sessionId: string | null;
   recordingId: string | null;
   title: string | null;
@@ -36,6 +38,7 @@ type Send = (command: StudioCommand) => void;
 
 const IDLE: RecorderState = {
   status: 'idle',
+  kind: 'audio',
   sessionId: null,
   recordingId: null,
   title: null,
@@ -217,10 +220,10 @@ export class RecorderHub {
   }
 
   /** The studio confirms its MediaRecorder is running. */
-  ackRecording(sessionId: string, chunkMs = 5_000): boolean {
+  ackRecording(sessionId: string, chunkMs = 5_000, kind: 'audio' | 'screen' = 'audio'): boolean {
     if (this.state.sessionId !== sessionId) return false;
     if (this.state.status !== 'arming') return false;
-    this.set({ status: 'recording', startedAt: new Date().toISOString() });
+    this.set({ status: 'recording', kind, startedAt: new Date().toISOString() });
 
     // A page can acknowledge and then produce nothing — a background tab that
     // still holds permission, throttled to a standstill. Silence has to end the

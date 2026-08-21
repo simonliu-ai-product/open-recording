@@ -19,7 +19,13 @@ export default defineConfig({
     launchOptions: {
       // A synthetic microphone, so the suite records real audio through the
       // real MediaRecorder without asking for anyone's actual microphone.
-      args: ['--use-fake-device-for-media-stream', '--use-fake-ui-for-media-stream'],
+      args: [
+        '--use-fake-device-for-media-stream',
+        '--use-fake-ui-for-media-stream',
+        // Answers the screen-picker with the current tab, so a capture test can
+        // run without anyone choosing a surface.
+        '--auto-select-tab-capture-source-by-title=open-recording',
+      ],
     },
   },
   webServer: {

@@ -7,6 +7,7 @@ export type RecordingSummary = {
   sizeBytes: number;
   tags: string[];
   source: 'agent' | 'studio';
+  kind: 'audio' | 'screen';
   transcribed: boolean;
   hasNotes: boolean;
   preview: string | null;

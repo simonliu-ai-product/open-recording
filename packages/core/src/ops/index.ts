@@ -16,12 +16,13 @@ export type { WhisperEnvironment } from '../stt/whisper.ts';
 export { formatTimestamp } from '../stt/whisper.ts';
 export { type ApiContext, type ApiContextOptions, makeContext, OpsError } from './context.ts';
 export {
-  audioPath,
   deleteRecording,
   listRecordings,
+  mediaPath,
   type RecordingSummary,
   readNotes,
   readRecording,
+  readSubtitles,
   readTranscript,
   renameRecording,
   searchTranscripts,

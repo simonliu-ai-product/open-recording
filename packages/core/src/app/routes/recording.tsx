@@ -80,16 +80,36 @@ export function RecordingPage() {
         </h1>
         <p className="folio mt-2">
           {new Date(meta.createdAt).toLocaleString()} · {formatDuration(meta.durationMs)} ·{' '}
-          {formatBytes(meta.sizeBytes)} · {meta.source} · {meta.id}
+          {formatBytes(meta.sizeBytes)} · {meta.kind === 'screen' ? 'screen' : 'audio'} ·{' '}
+          {meta.source} · {meta.id}
         </p>
       </header>
 
-      {/* biome-ignore lint/a11y/useMediaCaption: the transcript below is the caption */}
-      <audio
-        controls
-        src={`/__rec/recordings/${encodeURIComponent(id)}/audio`}
-        className="w-full rounded-[6px]"
-      />
+      {meta.kind === 'screen' ? (
+        <video
+          controls
+          src={`/__rec/recordings/${encodeURIComponent(id)}/audio`}
+          className="w-full rounded-[8px] border border-hairline bg-black"
+        >
+          {/* The cues the transcription wrote, so the recording plays subtitled. */}
+          {transcript ? (
+            <track
+              default
+              kind="subtitles"
+              label={transcript.language}
+              srcLang={transcript.language}
+              src={`/__rec/recordings/${encodeURIComponent(id)}/subtitles.vtt`}
+            />
+          ) : null}
+        </video>
+      ) : (
+        // biome-ignore lint/a11y/useMediaCaption: the transcript below is the caption
+        <audio
+          controls
+          src={`/__rec/recordings/${encodeURIComponent(id)}/audio`}
+          className="w-full rounded-[6px]"
+        />
+      )}
 
       <div className="mt-4 flex items-center gap-2">
         <button

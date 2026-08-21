@@ -1,15 +1,17 @@
 import { existsSync } from 'node:fs';
 import { readFile, writeFile } from 'node:fs/promises';
 import {
-  AUDIO_FILE,
   deleteRecordingDir,
   listRecordingIds,
+  mediaFileName,
   NOTES_FILE,
   patchMeta,
   type RecordingMeta,
   readMeta,
   readTranscriptFile,
   recordingFile,
+  SUBTITLE_SRT_FILE,
+  SUBTITLE_VTT_FILE,
   TRANSCRIPT_MD_FILE,
   type Transcript,
 } from '../files/store.ts';
@@ -17,7 +19,7 @@ import { type ApiContext, OpsError } from './context.ts';
 
 export type RecordingSummary = Pick<
   RecordingMeta,
-  'id' | 'title' | 'status' | 'createdAt' | 'durationMs' | 'sizeBytes' | 'tags' | 'source'
+  'id' | 'title' | 'status' | 'createdAt' | 'durationMs' | 'sizeBytes' | 'tags' | 'source' | 'kind'
 > & {
   transcribed: boolean;
   hasNotes: boolean;
@@ -36,6 +38,7 @@ function summarize(meta: RecordingMeta, ctx: ApiContext, preview: string | null)
     sizeBytes: meta.sizeBytes,
     tags: meta.tags,
     source: meta.source,
+    kind: meta.kind ?? 'audio',
     transcribed: Boolean(meta.transcript),
     hasNotes: Boolean(notes && existsSync(notes)),
     preview,
@@ -63,8 +66,9 @@ export async function readRecording(ctx: ApiContext, id: string): Promise<Record
   return meta;
 }
 
-export function audioPath(ctx: ApiContext, id: string): string {
-  const file = recordingFile(ctx, id, AUDIO_FILE);
+export async function mediaPath(ctx: ApiContext, id: string): Promise<string> {
+  const meta = await readRecording(ctx, id);
+  const file = recordingFile(ctx, id, mediaFileName(meta));
   if (!file) throw new OpsError(400, `invalid recording id: ${id}`);
   if (!existsSync(file)) throw new OpsError(404, `no audio for recording: ${id}`);
   return file;
@@ -90,6 +94,20 @@ export async function readTranscript(
     throw new OpsError(404, `not transcribed yet: ${id} — call transcribe_recording first`);
   }
   return view === 'text' ? transcript.text : transcript;
+}
+
+/** The stored cues, in the format a player or an editor asked for. */
+export async function readSubtitles(
+  ctx: ApiContext,
+  id: string,
+  format: 'srt' | 'vtt',
+): Promise<string> {
+  await readRecording(ctx, id);
+  const file = recordingFile(ctx, id, format === 'srt' ? SUBTITLE_SRT_FILE : SUBTITLE_VTT_FILE);
+  if (!file || !existsSync(file)) {
+    throw new OpsError(404, `no subtitles for: ${id} — transcribe it first`);
+  }
+  return await readFile(file, 'utf8');
 }
 
 export async function renameRecording(

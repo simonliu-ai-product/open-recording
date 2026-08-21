@@ -14,6 +14,8 @@ export type Meta = {
   durationMs: number;
   sizeBytes: number;
   source: string;
+  kind: 'audio' | 'screen';
+  file: string;
 };
 
 /** The workspace holds one recorder, so each test starts from an empty shelf. */

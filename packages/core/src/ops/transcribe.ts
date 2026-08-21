@@ -1,16 +1,19 @@
 import { existsSync } from 'node:fs';
 import { writeFile } from 'node:fs/promises';
 import {
-  AUDIO_FILE,
+  mediaFileName,
   patchMeta,
   readMeta,
   recordingFile,
+  SUBTITLE_SRT_FILE,
+  SUBTITLE_VTT_FILE,
   TRANSCRIPT_FILE,
   TRANSCRIPT_MD_FILE,
   type Transcript,
   WAV_FILE,
 } from '../files/store.ts';
 import { ScriptConversionUnavailableError, scriptConversionAvailable } from '../stt/script.ts';
+import { toSrt, toVtt } from '../stt/subtitles.ts';
 import {
   inspectEnvironment,
   toMarkdown,
@@ -60,7 +63,7 @@ export async function transcribeRecording(
   if (!meta) throw new OpsError(404, `recording not found: ${id}`);
   if (meta.status === 'recording') throw new OpsError(409, `still recording: ${id}`);
 
-  const audio = recordingFile(ctx, id, AUDIO_FILE);
+  const audio = recordingFile(ctx, id, mediaFileName(meta));
   if (!audio || !existsSync(audio)) throw new OpsError(404, `no audio for recording: ${id}`);
 
   const jsonPath = recordingFile(ctx, id, TRANSCRIPT_FILE);
@@ -98,6 +101,11 @@ export async function transcribeRecording(
   const markdown = toMarkdown(meta.title, transcript);
   await writeFile(jsonPath, `${JSON.stringify(transcript, null, 2)}\n`, 'utf8');
   await writeFile(mdPath, markdown, 'utf8');
+  // Subtitles are the same segments in the two formats a player will load.
+  const srtPath = recordingFile(ctx, id, SUBTITLE_SRT_FILE);
+  const vttPath = recordingFile(ctx, id, SUBTITLE_VTT_FILE);
+  if (srtPath) await writeFile(srtPath, toSrt(transcript), 'utf8');
+  if (vttPath) await writeFile(vttPath, toVtt(transcript), 'utf8');
   await patchMeta(ctx, id, {
     transcript: {
       model: transcript.model,

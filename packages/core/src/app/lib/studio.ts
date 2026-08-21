@@ -23,6 +23,10 @@ export type StudioState = {
   /** 0–1, from the analyser on the live stream. Zero unless a stream is open. */
   level: number;
   micError: string | null;
+  /** What this page is holding, once it holds anything. */
+  capture: CaptureKind;
+  /** Set when a screen capture carries no audio, which is most of them. */
+  captureSilent: boolean;
 };
 
 type Command =
@@ -53,8 +57,13 @@ const IDLE_RECORDER: RecorderState = {
   error: null,
 };
 
-function pickMimeType(): string | undefined {
-  const candidates = ['audio/webm;codecs=opus', 'audio/webm', 'audio/ogg;codecs=opus'];
+export type CaptureKind = 'audio' | 'screen';
+
+function pickMimeType(kind: CaptureKind): string | undefined {
+  const candidates =
+    kind === 'screen'
+      ? ['video/webm;codecs=vp9,opus', 'video/webm;codecs=vp8,opus', 'video/webm']
+      : ['audio/webm;codecs=opus', 'audio/webm', 'audio/ogg;codecs=opus'];
   return candidates.find((type) => MediaRecorder.isTypeSupported(type));
 }
 
@@ -71,6 +80,8 @@ class Studio {
     mic: 'unknown',
     level: 0,
     micError: null,
+    capture: 'audio',
+    captureSilent: false,
   };
 
   private source: EventSource | null = null;
@@ -153,15 +164,57 @@ class Studio {
       const stream = await navigator.mediaDevices.getUserMedia({
         audio: { echoCancellation: true, noiseSuppression: true },
       });
-      this.stream = stream;
-      this.watchLevel(stream);
-      this.set({ mic: 'armed', micError: null });
-      await this.claimMicrophone();
+      this.take(stream, 'audio');
     } catch (err) {
       this.set({ mic: 'denied', micError: err instanceof Error ? err.message : String(err) });
       throw err;
     }
   };
+
+  /**
+   * Takes a browser tab — picture and, if the person ticked the box, its audio.
+   * Chrome will not hand over a window's or the whole screen's sound on macOS,
+   * so a screen recording with no audio track is a normal outcome and is worth
+   * saying out loud rather than discovering in the transcript.
+   */
+  armScreen = async (): Promise<void> => {
+    try {
+      const stream = await navigator.mediaDevices.getDisplayMedia({
+        video: { frameRate: 30 },
+        audio: true,
+      });
+      this.releaseStream();
+      this.take(stream, 'screen');
+      // Chrome's own "Stop sharing" ends the tracks behind our back.
+      for (const track of stream.getVideoTracks()) {
+        track.addEventListener('ended', () => this.surfaceGone());
+      }
+    } catch (err) {
+      this.set({ mic: 'denied', micError: err instanceof Error ? err.message : String(err) });
+      throw err;
+    }
+  };
+
+  private take(stream: MediaStream, kind: CaptureKind): void {
+    this.stream = stream;
+    const silent = stream.getAudioTracks().length === 0;
+    if (!silent) this.watchLevel(stream);
+    this.set({ mic: 'armed', micError: null, capture: kind, captureSilent: silent, level: 0 });
+    void this.claimMicrophone();
+  }
+
+  private surfaceGone(): void {
+    const sessionId = this.sessionId;
+    if (sessionId) this.endRecording(sessionId, false, 'the shared tab stopped');
+    this.releaseStream();
+    this.set({ mic: 'unknown', capture: 'audio', captureSilent: false, level: 0 });
+  }
+
+  private releaseStream(): void {
+    this.stopLevelWatch();
+    for (const track of this.stream?.getTracks() ?? []) track.stop();
+    this.stream = null;
+  }
 
   /**
    * Tells the server this page is holding a microphone now. Ownership goes to
@@ -175,10 +228,8 @@ class Studio {
   }
 
   disarm = (): void => {
-    this.stopLevelWatch();
-    for (const track of this.stream?.getTracks() ?? []) track.stop();
-    this.stream = null;
-    this.set({ mic: 'unknown', level: 0 });
+    this.releaseStream();
+    this.set({ mic: 'unknown', level: 0, capture: 'audio', captureSilent: false });
   };
 
   private watchLevel(stream: MediaStream): void {
@@ -229,7 +280,7 @@ class Studio {
       const stream = this.stream;
       if (!stream) throw new Error('no microphone');
 
-      const mimeType = pickMimeType();
+      const mimeType = pickMimeType(this.snapshot.capture);
       const recorder = new MediaRecorder(stream, mimeType ? { mimeType } : undefined);
       this.recorder = recorder;
       this.segmentStartedAt = Date.now();
@@ -262,7 +313,9 @@ class Studio {
         () => this.endRecording(command.sessionId, false),
         command.maxDurationMs,
       );
-      await this.post(`/__studio/sessions/${command.sessionId}/ack`);
+      await this.post(`/__studio/sessions/${command.sessionId}/ack`, {
+        kind: this.snapshot.capture,
+      });
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
       this.set({ mic: 'denied', micError: message });

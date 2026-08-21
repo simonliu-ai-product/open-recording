@@ -1,5 +1,5 @@
 import type { ViteDevServer } from 'vite';
-import { appendChunk } from '../../files/store.ts';
+import { AUDIO_FILE, appendChunk, SCREEN_FILE } from '../../files/store.ts';
 import { validateMutationRequest } from '../../http/request-guard.ts';
 import type { ApiContext } from '../../ops/context.ts';
 import { recorderHub, type StudioCommand } from '../../recorder/hub.ts';
@@ -71,7 +71,8 @@ export function registerStudioRoutes(server: ViteDevServer, ctx: ApiContext): vo
           }
           const body = await readRawBody(req, MAX_CHUNK_BYTES);
           if (body.length === 0) return json(res, 200, { bytes: state.bytes });
-          const bytes = await appendChunk(ctx, state.recordingId, body);
+          const name = state.kind === 'screen' ? SCREEN_FILE : AUDIO_FILE;
+          const bytes = await appendChunk(ctx, state.recordingId, name, body);
           const durationMs = Number(url.searchParams.get('durationMs'));
           hub.noteProgress(sessionId, {
             bytes,
@@ -82,7 +83,11 @@ export function registerStudioRoutes(server: ViteDevServer, ctx: ApiContext): vo
 
         const guard = validateMutationRequest(req, { requireJsonBody: true });
         if (!guard.ok) return json(res, guard.status, { error: guard.error });
-        const body = (await readBody(req)) as { error?: string; durationMs?: number };
+        const body = (await readBody(req)) as {
+          error?: string;
+          durationMs?: number;
+          kind?: 'audio' | 'screen';
+        };
 
         if (action === 'paused' || action === 'resumed') {
           const moved = action === 'paused' ? hub.ackPaused(sessionId) : hub.ackResumed(sessionId);
@@ -90,7 +95,7 @@ export function registerStudioRoutes(server: ViteDevServer, ctx: ApiContext): vo
         }
 
         if (action === 'ack') {
-          const accepted = hub.ackRecording(sessionId, ctx.chunkMs);
+          const accepted = hub.ackRecording(sessionId, ctx.chunkMs, body.kind ?? 'audio');
           if (!accepted) {
             // Either the session moved on or the studio failed to open a
             // microphone; an error body is how the waiting caller learns why.

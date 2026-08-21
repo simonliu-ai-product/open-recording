@@ -1,5 +1,5 @@
 import config from 'virtual:open-recording/config';
-import { Mic, MicOff, Moon, Sun } from 'lucide-react';
+import { Mic, MicOff, Monitor, Moon, Sun } from 'lucide-react';
 import { useTheme } from 'next-themes';
 import type { StudioState } from '../lib/studio';
 import { studio } from '../lib/studio';
@@ -59,6 +59,7 @@ type Props = {
 export function Sidebar({ counts, tags, selectedId, onSelect, state }: Props) {
   const { resolvedTheme, setTheme } = useTheme();
   const armed = state.mic === 'armed';
+  const micArmed = armed && state.capture === 'audio';
 
   return (
     <aside className="flex h-dvh w-[248px] shrink-0 flex-col border-sidebar-border border-r bg-sidebar">
@@ -129,23 +130,40 @@ export function Sidebar({ counts, tags, selectedId, onSelect, state }: Props) {
         <button
           type="button"
           onClick={() => void studio.arm().catch(() => {})}
-          disabled={armed}
+          disabled={micArmed}
           className={cn(
             'flex w-full items-center gap-2 rounded-[6px] px-2 py-1.5 text-[12px]',
-            armed
+            micArmed
               ? 'cursor-default text-muted-foreground'
               : 'bg-brand text-brand-foreground hover:opacity-90',
           )}
         >
-          {armed ? <Mic className="size-3.5" /> : <MicOff className="size-3.5" />}
+          {micArmed ? <Mic className="size-3.5" /> : <MicOff className="size-3.5" />}
           <span className="flex-1 text-left">
-            {armed
+            {micArmed
               ? 'Microphone armed'
               : state.mic === 'denied'
                 ? 'Microphone blocked'
                 : 'Arm microphone'}
           </span>
         </button>
+        {/* Chrome will not give a window's or the screen's sound on macOS, so
+            this takes a tab — the only surface whose audio it shares. */}
+        <button
+          type="button"
+          onClick={() => void studio.armScreen().catch(() => {})}
+          className="mt-1.5 flex w-full items-center gap-2 rounded-[6px] px-2 py-1.5 text-[12px] text-sidebar-foreground/75 hover:bg-sidebar-accent/60"
+        >
+          <Monitor className="size-3.5" />
+          <span className="flex-1 text-left">
+            {armed && state.capture === 'screen' ? 'Sharing a tab' : 'Record a tab'}
+          </span>
+        </button>
+        {state.capture === 'screen' && state.captureSilent ? (
+          <p className="mt-1 px-2 text-[11px] text-brand leading-snug">
+            Shared without audio — tick "Also share tab audio" to get a transcript.
+          </p>
+        ) : null}
         <div className="mt-2 flex items-center justify-between px-2">
           <span className="folio">v{config.version}</span>
           <span className="flex items-center gap-1.5 folio">

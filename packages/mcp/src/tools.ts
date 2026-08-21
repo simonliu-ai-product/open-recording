@@ -8,6 +8,7 @@ import {
   pauseRecording,
   readNotes,
   readRecording,
+  readSubtitles,
   readTranscript,
   recorderStatus,
   renameRecording,
@@ -70,7 +71,7 @@ export function registerTools(server: McpServer, ctx: ApiContext): void {
     {
       title: 'Start recording',
       description:
-        'Press record. Returns once the studio page confirms its microphone is live; fails if no studio is connected or permission is missing. One recording at a time.',
+        'Press record on whatever the studio is holding — a microphone, or a browser tab with its picture and audio. Returns once the studio confirms it is capturing; fails if no studio is connected or nothing is armed. One recording at a time.',
       inputSchema: z.object({
         title: z.string().optional().describe('what this recording is, e.g. "Weekly sync"'),
         tags: z.array(z.string()).optional(),
@@ -200,6 +201,17 @@ export function registerTools(server: McpServer, ctx: ApiContext): void {
       }),
     },
     ({ id, view }) => run(() => readTranscript(ctx, id, view ?? 'markdown')),
+  );
+
+  server.registerTool(
+    'read_subtitles',
+    {
+      title: 'Read subtitles',
+      description:
+        'The transcript as subtitle cues — `srt` for an editor, `vtt` for a player. Written when a recording is transcribed.',
+      inputSchema: z.object({ id: z.string(), format: z.enum(['srt', 'vtt']).optional() }),
+    },
+    ({ id, format }) => run(() => readSubtitles(ctx, id, format ?? 'srt')),
   );
 
   server.registerTool(
