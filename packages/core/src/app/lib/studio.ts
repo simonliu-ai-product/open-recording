@@ -25,6 +25,10 @@ export type StudioState = {
   micError: string | null;
   /** What this page is holding, once it holds anything. */
   capture: CaptureKind;
+  /** Microphones this browser will offer. Named only once permission is given. */
+  devices: Array<{ id: string; label: string }>;
+  /** The one in use, or empty for whatever the system calls default. */
+  deviceId: string;
   /** Set when a screen capture carries no audio, which is most of them. */
   captureSilent: boolean;
 };
@@ -82,6 +86,8 @@ class Studio {
     micError: null,
     capture: 'audio',
     captureSilent: false,
+    devices: [],
+    deviceId: '',
   };
 
   private source: EventSource | null = null;
@@ -158,13 +164,29 @@ class Studio {
    * user gesture, so a studio that is armed before an agent calls start is the
    * difference between recording instantly and timing out on a blocked prompt.
    */
-  arm = async (): Promise<void> => {
-    if (this.stream) return;
+  /**
+   * Takes a microphone, optionally a named one. A virtual input — BlackHole and
+   * the like — is an ordinary device here, which is how a workspace records
+   * what the machine is playing rather than what the room is saying.
+   */
+  arm = async (deviceId?: string): Promise<void> => {
+    const wanted = deviceId ?? this.snapshot.deviceId;
+    if (this.stream && this.snapshot.capture === 'audio' && wanted === this.snapshot.deviceId) {
+      return;
+    }
+    this.releaseStream();
     try {
       const stream = await navigator.mediaDevices.getUserMedia({
-        audio: { echoCancellation: true, noiseSuppression: true },
+        audio: {
+          echoCancellation: true,
+          noiseSuppression: true,
+          ...(wanted ? { deviceId: { exact: wanted } } : {}),
+        },
       });
+      this.set({ deviceId: wanted });
       this.take(stream, 'audio');
+      // Labels are blank until permission is granted, so the list is read after.
+      void this.listDevices();
     } catch (err) {
       this.set({ mic: 'denied', micError: err instanceof Error ? err.message : String(err) });
       throw err;
@@ -202,6 +224,22 @@ class Studio {
     this.set({ mic: 'armed', micError: null, capture: kind, captureSilent: silent, level: 0 });
     void this.claimMicrophone();
   }
+
+  /** The inputs this browser will offer, with the names it will show for them. */
+  listDevices = async (): Promise<void> => {
+    try {
+      const all = await navigator.mediaDevices.enumerateDevices();
+      const devices = all
+        .filter((device) => device.kind === 'audioinput')
+        .map((device, i) => ({
+          id: device.deviceId,
+          label: device.label || `Microphone ${i + 1}`,
+        }));
+      this.set({ devices });
+    } catch {
+      this.set({ devices: [] });
+    }
+  };
 
   private surfaceGone(): void {
     const sessionId = this.sessionId;
