@@ -16,7 +16,10 @@ export type { WhisperEnvironment } from '../stt/whisper.ts';
 export { formatTimestamp } from '../stt/whisper.ts';
 export { type ApiContext, type ApiContextOptions, makeContext, OpsError } from './context.ts';
 export {
+  type Download,
+  type DownloadKind,
   deleteRecording,
+  downloadPath,
   listRecordings,
   mediaPath,
   type RecordingSummary,
@@ -42,6 +45,7 @@ export {
   stopRecording,
 } from './session.ts';
 export {
+  editTranscriptSegment,
   type TranscribeOptions,
   type TranscribeResult,
   transcribeEnvironment,

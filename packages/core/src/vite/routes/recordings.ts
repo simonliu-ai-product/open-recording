@@ -4,7 +4,9 @@ import type { ViteDevServer } from 'vite';
 import { validateMutationRequest } from '../../http/request-guard.ts';
 import type { ApiContext } from '../../ops/context.ts';
 import {
+  type DownloadKind,
   deleteRecording,
+  downloadPath,
   listRecordings,
   mediaPath,
   readNotes,
@@ -39,6 +41,7 @@ import { fail, json, readBody } from './context.ts';
 // GET    /__rec/recordings/:id         meta
 // GET    /__rec/recordings/:id/audio   the captured webm, with byte ranges so it seeks
 // GET    /__rec/recordings/:id/subtitles.vtt  cues a <video> can load directly
+// GET    /__rec/recordings/:id/download/:kind  media|transcript|srt|vtt|segments, as a file
 // GET    /__rec/recordings/:id/transcript?view=markdown|text|segments
 // GET    /__rec/recordings/:id/notes       agent-written Markdown beside the audio
 // POST   /__rec/recordings/:id/transcribe  { language?, model?, force? }
@@ -134,6 +137,22 @@ export function registerRecordingRoutes(server: ViteDevServer, ctx: ApiContext):
         res.statusCode = 200;
         res.setHeader('content-length', String(info.size));
         createReadStream(file).pipe(res);
+        return;
+      }
+
+      const downloadMatch = url.pathname.match(
+        /^\/recordings\/([^/]+)\/download\/(media|transcript|srt|vtt|segments)$/,
+      );
+      if (method === 'GET' && downloadMatch) {
+        const [, rawId, kind] = downloadMatch;
+        const file = await downloadPath(ctx, decodeURIComponent(rawId), kind as DownloadKind);
+        const info = await stat(file.path);
+        res.statusCode = 200;
+        res.setHeader('content-type', file.contentType);
+        res.setHeader('content-length', String(info.size));
+        // Without this the browser plays the file instead of saving it.
+        res.setHeader('content-disposition', `attachment; filename="${file.filename}"`);
+        createReadStream(file.path).pipe(res);
         return;
       }
 

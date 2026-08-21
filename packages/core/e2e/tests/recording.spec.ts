@@ -189,3 +189,28 @@ test.describe('sorting', () => {
     );
   });
 });
+
+test.describe('downloads', () => {
+  test('every artefact comes back as a file, named after the recording', async ({
+    page,
+    request,
+  }) => {
+    await armedStudio(page);
+    await control(page, 'start', { title: 'Downloadable' });
+    await expect.poll(async () => (await status(page)).durationMs).toBeGreaterThan(0);
+    await control(page, 'stop');
+    await expect.poll(async () => (await status(page)).status).toBe('idle');
+
+    const [id] = await listOnDisk();
+    const media = await request.get(`/__rec/recordings/${id}/download/media`);
+    expect(media.status()).toBe(200);
+    // Without the disposition the browser plays it instead of saving it.
+    expect(media.headers()['content-disposition']).toContain(`filename="${id}.webm"`);
+    expect((await media.body()).byteLength).toBeGreaterThan(1000);
+
+    // Subtitles do not exist until it has been transcribed, and say so.
+    const srt = await request.get(`/__rec/recordings/${id}/download/srt`);
+    expect(srt.status()).toBe(404);
+    expect((await srt.json()).error).toContain('not transcribed yet');
+  });
+});
