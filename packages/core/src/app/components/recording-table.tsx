@@ -1,4 +1,4 @@
-import { ChevronDown, ChevronUp, FileText, Mic, Monitor, StickyNote } from 'lucide-react';
+import { ChevronDown, ChevronUp, FileText, Loader2, Mic, Monitor, StickyNote } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { formatBytes, formatDuration, type RecordingSummary } from '../lib/api';
 import { cn } from '../lib/utils';
@@ -113,7 +113,9 @@ export function RecordingTable({ recordings, sort, onSort }: Props) {
               <td className="px-4 py-2.5">
                 <span className="flex items-center justify-end gap-2 text-muted-foreground">
                   {recording.hasNotes ? <StickyNote className="size-3.5" /> : null}
-                  {recording.transcribed ? (
+                  {recording.transcribing ? (
+                    <Loader2 className="size-3.5 animate-spin" />
+                  ) : recording.transcribed ? (
                     <FileText className="size-3.5" />
                   ) : (
                     <span className="folio">—</span>

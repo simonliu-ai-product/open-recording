@@ -9,6 +9,7 @@ export type RecordingSummary = {
   source: 'agent' | 'studio';
   kind: 'audio' | 'screen';
   transcribed: boolean;
+  transcribing: boolean;
   hasNotes: boolean;
   preview: string | null;
 };
@@ -79,6 +80,12 @@ export const api = {
     request<RecordingMeta>(`/__rec/recordings/${encodeURIComponent(id)}`),
   readTranscript: (id: string) =>
     request<Transcript>(`/__rec/recordings/${encodeURIComponent(id)}/transcript?view=segments`),
+  editSegment: (id: string, index: number, text: string) =>
+    request<Transcript>(`/__rec/recordings/${encodeURIComponent(id)}/transcript`, {
+      method: 'PATCH',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ index, text }),
+    }),
   transcribe: (id: string, body: { language?: string; force?: boolean } = {}) =>
     request<{ id: string; segmentCount: number; language: string }>(
       `/__rec/recordings/${encodeURIComponent(id)}/transcribe`,

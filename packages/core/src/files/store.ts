@@ -39,6 +39,8 @@ export type RecordingMeta = {
   /** Name of the captured file inside the recording's directory. */
   file: string;
   tags: string[];
+  /** Set while whisper is working on it, so the list can say so. */
+  transcribing?: boolean;
   /** Who pressed record — an agent tool call or a person in the studio UI. */
   source: 'agent' | 'studio';
   note?: string;

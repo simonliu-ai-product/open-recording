@@ -1,4 +1,4 @@
-import { FileText, Monitor, StickyNote } from 'lucide-react';
+import { FileText, Loader2, Monitor, StickyNote } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { formatDuration, type RecordingSummary } from '../lib/api';
 
@@ -27,6 +27,7 @@ export function RecordingCard({ recording }: { recording: RecordingSummary }) {
             <span className="ml-auto flex items-center gap-1.5 text-muted-foreground">
               {recording.kind === 'screen' ? <Monitor className="size-3.5" /> : null}
               {recording.hasNotes ? <StickyNote className="size-3.5" /> : null}
+              {recording.transcribing ? <Loader2 className="size-3.5 animate-spin" /> : null}
               {recording.transcribed ? <FileText className="size-3.5" /> : null}
             </span>
           </div>
