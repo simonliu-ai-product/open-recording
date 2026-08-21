@@ -1,7 +1,8 @@
-import { ArrowLeft, Loader2, Trash2, Wand2 } from 'lucide-react';
+import { ArrowLeft, Download, Loader2, Trash2, Wand2 } from 'lucide-react';
 import { useCallback, useEffect, useState } from 'react';
 import { Link, useNavigate, useOutletContext, useParams } from 'react-router-dom';
 import { TagEditor } from '../components/tag-editor';
+import { TranscriptLine } from '../components/transcript-line';
 import { api, formatBytes, formatDuration, type RecordingMeta, type Transcript } from '../lib/api';
 import type { ShellContext } from './shell';
 
@@ -122,7 +123,7 @@ export function RecordingPage() {
         />
       )}
 
-      <div className="mt-4 flex items-center gap-2">
+      <div className="mt-4 flex flex-wrap items-center gap-2">
         <button
           type="button"
           onClick={transcribe}
@@ -132,6 +133,40 @@ export function RecordingPage() {
           {busy ? <Loader2 className="size-3.5 animate-spin" /> : <Wand2 className="size-3.5" />}
           {transcript ? 'Transcribe again' : 'Transcribe'}
         </button>
+        {/* Plain links: the file is already on the server, and a link is the
+            one control a browser will save rather than play. */}
+        <span className="flex items-center gap-1">
+          <Download className="size-3.5 text-muted-foreground" />
+          <a
+            href={`/__rec/recordings/${encodeURIComponent(id)}/download/media`}
+            className="rounded-[6px] px-2 py-1.5 text-[12.5px] text-muted-foreground hover:bg-muted hover:text-foreground"
+          >
+            {meta.kind === 'screen' ? 'Video' : 'Audio'}
+          </a>
+          {transcript ? (
+            <>
+              <a
+                href={`/__rec/recordings/${encodeURIComponent(id)}/download/srt`}
+                className="rounded-[6px] px-2 py-1.5 text-[12.5px] text-muted-foreground hover:bg-muted hover:text-foreground"
+              >
+                SRT
+              </a>
+              <a
+                href={`/__rec/recordings/${encodeURIComponent(id)}/download/vtt`}
+                className="rounded-[6px] px-2 py-1.5 text-[12.5px] text-muted-foreground hover:bg-muted hover:text-foreground"
+              >
+                VTT
+              </a>
+              <a
+                href={`/__rec/recordings/${encodeURIComponent(id)}/download/transcript`}
+                className="rounded-[6px] px-2 py-1.5 text-[12.5px] text-muted-foreground hover:bg-muted hover:text-foreground"
+              >
+                Markdown
+              </a>
+            </>
+          ) : null}
+        </span>
+
         <button
           type="button"
           onClick={remove}
@@ -155,15 +190,14 @@ export function RecordingPage() {
       <section className="mt-9">
         <p className="eyebrow mb-3">Transcript{transcript ? ` · ${transcript.language}` : ''}</p>
         {transcript ? (
-          <div className="space-y-2">
-            {transcript.segments.map((segment) => (
-              <p
+          <div className="space-y-1">
+            {transcript.segments.map((segment, index) => (
+              <TranscriptLine
                 key={`${segment.start}-${segment.end}`}
-                className="flex gap-3 text-[14px] leading-relaxed"
-              >
-                <span className="folio shrink-0 pt-1">{formatDuration(segment.start)}</span>
-                <span>{segment.text}</span>
-              </p>
+                start={segment.start}
+                text={segment.text}
+                onSave={async (text) => setTranscript(await api.editSegment(id, index, text))}
+              />
             ))}
           </div>
         ) : (
