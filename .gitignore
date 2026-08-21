@@ -11,3 +11,5 @@ dist
 **/recordings/*/
 !**/recordings/.gitkeep
 models
+playwright-report
+test-results
