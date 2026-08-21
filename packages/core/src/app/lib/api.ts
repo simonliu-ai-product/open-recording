@@ -84,6 +84,12 @@ export const api = {
       `/__rec/recordings/${encodeURIComponent(id)}/transcribe`,
       jsonInit(body),
     ),
+  setTags: (id: string, tags: string[]) =>
+    request<RecordingMeta>(`/__rec/recordings/${encodeURIComponent(id)}`, {
+      method: 'PATCH',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ tags }),
+    }),
   rename: (id: string, title: string) =>
     request<RecordingMeta>(`/__rec/recordings/${encodeURIComponent(id)}`, {
       method: 'PATCH',

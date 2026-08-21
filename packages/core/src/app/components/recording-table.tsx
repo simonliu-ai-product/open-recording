@@ -1,22 +1,72 @@
-import { FileText, Mic, Monitor, StickyNote } from 'lucide-react';
+import { ChevronDown, ChevronUp, FileText, Mic, Monitor, StickyNote } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { formatBytes, formatDuration, type RecordingSummary } from '../lib/api';
+import { cn } from '../lib/utils';
+import type { Sort, SortField } from '../routes/home';
+
+type Props = {
+  recordings: RecordingSummary[];
+  sort: Sort;
+  onSort: (field: SortField) => void;
+};
+
+/** A sortable column heading, carrying the state a screen reader needs too. */
+function Column({
+  field,
+  label,
+  sort,
+  onSort,
+  align = 'left',
+}: {
+  field: SortField;
+  label: string;
+  sort: Sort;
+  onSort: (field: SortField) => void;
+  align?: 'left' | 'right';
+}) {
+  const active = sort.field === field;
+  return (
+    <th
+      className={cn('px-3 py-2.5', align === 'right' && 'text-right')}
+      aria-sort={active ? (sort.desc ? 'descending' : 'ascending') : 'none'}
+    >
+      <button
+        type="button"
+        onClick={() => onSort(field)}
+        className={cn(
+          'eyebrow inline-flex items-center gap-1 font-medium hover:text-foreground',
+          active && 'text-foreground',
+          align === 'right' && 'flex-row-reverse',
+        )}
+      >
+        {label}
+        {active ? (
+          sort.desc ? (
+            <ChevronDown className="size-3" />
+          ) : (
+            <ChevronUp className="size-3" />
+          )
+        ) : null}
+      </button>
+    </th>
+  );
+}
 
 /**
  * The same recordings as the grid, read down a column instead of across a
  * page. A grid is for recognising one recording; a table is for comparing many
  * — which was recorded, how long, whether it has a transcript yet.
  */
-export function RecordingTable({ recordings }: { recordings: RecordingSummary[] }) {
+export function RecordingTable({ recordings, sort, onSort }: Props) {
   return (
     <div className="overflow-x-auto rounded-[8px] border border-hairline bg-card">
       <table className="w-full min-w-[720px] border-collapse text-left">
         <thead>
           <tr className="border-hairline border-b">
-            <th className="eyebrow px-4 py-2.5 font-medium">Title</th>
-            <th className="eyebrow px-3 py-2.5 font-medium">Recorded</th>
-            <th className="eyebrow px-3 py-2.5 text-right font-medium">Length</th>
-            <th className="eyebrow px-3 py-2.5 text-right font-medium">Size</th>
+            <Column field="title" label="Title" sort={sort} onSort={onSort} />
+            <Column field="recorded" label="Recorded" sort={sort} onSort={onSort} />
+            <Column field="length" label="Length" sort={sort} onSort={onSort} align="right" />
+            <Column field="size" label="Size" sort={sort} onSort={onSort} align="right" />
             <th className="eyebrow px-3 py-2.5 font-medium">Tags</th>
             <th className="eyebrow px-4 py-2.5 text-right font-medium">Transcript</th>
           </tr>
@@ -27,7 +77,7 @@ export function RecordingTable({ recordings }: { recordings: RecordingSummary[] 
               key={recording.id}
               className="border-hairline border-b last:border-b-0 hover:bg-muted/50"
             >
-              <td className="px-4 py-2.5">
+              <td className="px-3 py-2.5">
                 <Link
                   to={`/r/${encodeURIComponent(recording.id)}`}
                   className="flex items-center gap-2 text-[13px]"

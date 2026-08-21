@@ -1,6 +1,7 @@
 import { ArrowLeft, Loader2, Trash2, Wand2 } from 'lucide-react';
 import { useCallback, useEffect, useState } from 'react';
 import { Link, useNavigate, useOutletContext, useParams } from 'react-router-dom';
+import { TagEditor } from '../components/tag-editor';
 import { api, formatBytes, formatDuration, type RecordingMeta, type Transcript } from '../lib/api';
 import type { ShellContext } from './shell';
 
@@ -83,6 +84,15 @@ export function RecordingPage() {
           {formatBytes(meta.sizeBytes)} · {meta.kind === 'screen' ? 'screen' : 'audio'} ·{' '}
           {meta.source} · {meta.id}
         </p>
+        <div className="mt-3">
+          <TagEditor
+            tags={meta.tags}
+            onChange={async (tags) => {
+              setMeta(await api.setTags(id, tags));
+              refresh();
+            }}
+          />
+        </div>
       </header>
 
       {meta.kind === 'screen' ? (

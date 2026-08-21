@@ -16,6 +16,7 @@ export type Meta = {
   source: string;
   kind: 'audio' | 'screen';
   file: string;
+  tags: string[];
 };
 
 /** The workspace holds one recorder, so each test starts from an empty shelf. */

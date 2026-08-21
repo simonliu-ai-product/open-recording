@@ -124,3 +124,68 @@ test.describe('the list', () => {
     expect(await page.locator('table').count()).toBe(0);
   });
 });
+
+test.describe('tags', () => {
+  test('can be added and removed from the page, not only by an agent', async ({ page }) => {
+    await armedStudio(page);
+    await control(page, 'start', { title: 'Taggable' });
+    await expect.poll(async () => (await status(page)).durationMs).toBeGreaterThan(0);
+    await control(page, 'stop');
+    await expect.poll(async () => (await status(page)).status).toBe('idle');
+
+    const [id] = await listOnDisk();
+    await page.goto(`/r/${id}`);
+    await expect(page.getByRole('heading', { name: 'Taggable' })).toBeVisible();
+
+    await page.getByLabel('Add a tag').fill('research');
+    await page.getByLabel('Add a tag').press('Enter');
+    // On disk is what counts: the sidebar and the API read from there.
+    await expect.poll(async () => (await readMeta(id)).tags).toEqual(['research']);
+
+    await page.getByLabel('Add a tag').fill('q3');
+    await page.getByLabel('Add a tag').press('Enter');
+    await expect.poll(async () => (await readMeta(id)).tags).toEqual(['research', 'q3']);
+
+    await page.getByRole('button', { name: 'Remove tag research' }).click();
+    await expect.poll(async () => (await readMeta(id)).tags).toEqual(['q3']);
+
+    // And the tag becomes a way to navigate, which is the point of having them.
+    await page.goto('/');
+    await expect(page.getByRole('button', { name: /q3/ })).toBeVisible();
+  });
+});
+
+test.describe('sorting', () => {
+  test('a table heading orders the list, and the dropdown agrees', async ({ page }) => {
+    await armedStudio(page);
+    for (const title of ['Beta', 'Alpha']) {
+      await control(page, 'start', { title });
+      await expect.poll(async () => (await status(page)).durationMs).toBeGreaterThan(0);
+      await control(page, 'stop');
+      await expect.poll(async () => (await status(page)).status).toBe('idle');
+    }
+
+    await page.goto('/');
+    await page.getByRole('button', { name: 'Show as a table' }).click();
+    const rows = page.locator('table tbody tr');
+    await expect(rows).toHaveCount(2);
+    // Newest first by default: Alpha was recorded last.
+    await expect(rows.first()).toContainText('Alpha');
+
+    // Scoped to the table: once it is sorting by title, the dropdown button
+    // reads "Title" too, and an unscoped locator would find both.
+    const heading = page.locator('table thead').getByRole('button', { name: 'Title' });
+    await heading.click();
+    await expect(rows.first()).toContainText('Alpha');
+    // The two controls are one state: the dropdown now says what the column did.
+    await expect(page.getByRole('button', { name: 'Title', exact: true }).first()).toBeVisible();
+
+    // A second click on the same column turns it around.
+    await heading.click();
+    await expect(rows.first()).toContainText('Beta');
+    await expect(page.locator('table thead th', { hasText: 'Title' })).toHaveAttribute(
+      'aria-sort',
+      'descending',
+    );
+  });
+});

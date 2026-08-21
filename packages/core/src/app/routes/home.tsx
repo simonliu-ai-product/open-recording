@@ -20,7 +20,20 @@ import { cn } from '../lib/utils';
 import type { ShellContext } from './shell';
 import { useStudioState } from './shell';
 
-type SortKey = 'newest' | 'oldest' | 'longest' | 'title';
+/**
+ * One sort, two controls. The dropdown offers the orderings worth naming; a
+ * table header sets the same state, so the two can never disagree about how
+ * the list in front of you is ordered.
+ */
+export type SortField = 'recorded' | 'length' | 'title' | 'size';
+export type Sort = { field: SortField; desc: boolean };
+
+const FIELD_LABELS: Record<SortField, string> = {
+  recorded: 'Recorded',
+  length: 'Length',
+  title: 'Title',
+  size: 'Size',
+};
 
 type Filter = 'all' | 'transcribed' | 'pending';
 
@@ -39,31 +52,50 @@ const FILTERS: Array<{ key: Filter; label: string }> = [
   { key: 'pending', label: 'Pending' },
 ];
 
-const SORTS: Array<{ key: SortKey; label: string }> = [
-  { key: 'newest', label: 'Newest' },
-  { key: 'oldest', label: 'Oldest' },
-  { key: 'longest', label: 'Longest' },
-  { key: 'title', label: 'Title' },
+const SORTS: Array<{ label: string; sort: Sort }> = [
+  { label: 'Newest', sort: { field: 'recorded', desc: true } },
+  { label: 'Oldest', sort: { field: 'recorded', desc: false } },
+  { label: 'Longest', sort: { field: 'length', desc: true } },
+  { label: 'Title', sort: { field: 'title', desc: false } },
 ];
+
+function same(a: Sort, b: Sort): boolean {
+  return a.field === b.field && a.desc === b.desc;
+}
+
+/** The preset's name where there is one, otherwise the column and its direction. */
+function sortLabel(sort: Sort): string {
+  const preset = SORTS.find((option) => same(option.sort, sort));
+  return preset ? preset.label : `${FIELD_LABELS[sort.field]} ${sort.desc ? '↓' : '↑'}`;
+}
 
 const VIEW_LABELS: Record<string, { icon: string; title: string }> = {
   [ALL_ID]: { icon: '🎙️', title: 'Recordings' },
 };
 
-function sortRecordings(list: RecordingSummary[], key: SortKey): RecordingSummary[] {
-  const sorted = [...list];
-  if (key === 'newest') sorted.sort((a, b) => b.createdAt.localeCompare(a.createdAt));
-  if (key === 'oldest') sorted.sort((a, b) => a.createdAt.localeCompare(b.createdAt));
-  if (key === 'longest') sorted.sort((a, b) => b.durationMs - a.durationMs);
-  if (key === 'title') sorted.sort((a, b) => a.title.localeCompare(b.title));
-  return sorted;
+function sortRecordings(list: RecordingSummary[], sort: Sort): RecordingSummary[] {
+  const compare: Record<SortField, (a: RecordingSummary, b: RecordingSummary) => number> = {
+    recorded: (a, b) => a.createdAt.localeCompare(b.createdAt),
+    length: (a, b) => a.durationMs - b.durationMs,
+    title: (a, b) => a.title.localeCompare(b.title),
+    size: (a, b) => a.sizeBytes - b.sizeBytes,
+  };
+  const sorted = [...list].sort(compare[sort.field]);
+  return sort.desc ? sorted.reverse() : sorted;
 }
 
 export function Home() {
   const state = useStudioState();
   const { recordings, refresh, selectedId } = useOutletContext<ShellContext>();
   const [query, setQuery] = useState('');
-  const [sort, setSort] = useState<SortKey>('newest');
+  const [sort, setSort] = useState<Sort>({ field: 'recorded', desc: true });
+
+  // A second click on the same column turns it around; a new column starts
+  // whichever way round reads as "most interesting first".
+  const sortBy = (field: SortField) =>
+    setSort((was) =>
+      was.field === field ? { field, desc: !was.desc } : { field, desc: field !== 'title' },
+    );
   const [sortOpen, setSortOpen] = useState(false);
   const [filter, setFilter] = useState<Filter>('all');
   const [layout, setLayout] = useState<View>(() =>
@@ -203,29 +235,29 @@ export function Home() {
                 onBlur={() => window.setTimeout(() => setSortOpen(false), 120)}
                 className="flex h-8 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-[6px] border border-border bg-background pr-1.5 pl-2 font-medium text-[12.5px] outline-none hover:bg-muted"
               >
-                {sort === 'title' ? (
+                {sort.field === 'title' ? (
                   <Type className="size-3.5 text-muted-foreground" />
-                ) : sort === 'longest' ? (
-                  <Timer className="size-3.5 text-muted-foreground" />
-                ) : (
+                ) : sort.field === 'recorded' ? (
                   <Clock className="size-3.5 text-muted-foreground" />
+                ) : (
+                  <Timer className="size-3.5 text-muted-foreground" />
                 )}
-                {SORTS.find((s) => s.key === sort)?.label}
+                {sortLabel(sort)}
                 <ChevronDown className="size-3 text-muted-foreground" />
               </button>
               {sortOpen ? (
                 <div className="absolute right-0 z-10 mt-1 min-w-[150px] rounded-[6px] border border-border bg-card p-1 shadow-floating">
                   {SORTS.map((option) => (
                     <button
-                      key={option.key}
+                      key={option.label}
                       type="button"
                       onMouseDown={() => {
-                        setSort(option.key);
+                        setSort(option.sort);
                         setSortOpen(false);
                       }}
                       className={cn(
                         'flex w-full items-center rounded-[4px] px-2 py-1.5 text-left text-[12.5px] hover:bg-muted',
-                        sort === option.key && 'bg-muted font-medium',
+                        same(option.sort, sort) && 'bg-muted font-medium',
                       )}
                     >
                       {option.label}
@@ -278,7 +310,7 @@ export function Home() {
           </p>
         </div>
       ) : layout === 'table' ? (
-        <RecordingTable recordings={visible} />
+        <RecordingTable recordings={visible} sort={sort} onSort={sortBy} />
       ) : (
         <ul className="grid grid-cols-[repeat(auto-fill,minmax(240px,1fr))] gap-x-6 gap-y-9 md:grid-cols-[repeat(auto-fill,minmax(300px,1fr))]">
           {visible.map((recording) => (
