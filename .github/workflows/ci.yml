@@ -3,8 +3,9 @@ name: CI
 on:
   push:
     branches: [main]
+  # Every pull request, whatever it targets: work is often stacked on a branch
+  # that is not main yet, and that is exactly when the checks matter.
   pull_request:
-    branches: [main]
 
 concurrency:
   group: ci-${{ github.workflow }}-${{ github.ref }}
