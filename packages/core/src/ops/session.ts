@@ -18,6 +18,7 @@ import {
 } from '../files/store.ts';
 import { type RecorderState, recorderHub } from '../recorder/hub.ts';
 import { type ApiContext, OpsError } from './context.ts';
+import { transcribeRecording } from './transcribe.ts';
 
 /** How long a studio gets to open a microphone before the start is refused. */
 const ARM_TIMEOUT_MS = 15_000;
@@ -184,7 +185,24 @@ export async function stopRecording(ctx: ApiContext): Promise<RecordingMeta> {
     if (sessionId) hub.abandon(sessionId, 'studio did not confirm the stop');
   }
 
-  return await finalize(ctx, id, hub.snapshot());
+  const meta = await finalize(ctx, id, hub.snapshot());
+
+  /**
+   * `transcribe.auto` runs after the stop has been answered, never inside it: a
+   * long recording takes minutes to transcribe, and a caller waiting on `stop`
+   * would time out long before. The recording carries a `transcribing` flag
+   * while it runs, which is how the list knows to say so.
+   */
+  if (ctx.transcribe.auto && meta.status === 'ready') {
+    void transcribeRecording(ctx, id).catch(async (err: unknown) => {
+      await patchMeta(ctx, id, {
+        transcribing: false,
+        error: err instanceof Error ? err.message : String(err),
+      });
+    });
+  }
+
+  return meta;
 }
 
 /** How long a studio gets to confirm a pause or a resume. */

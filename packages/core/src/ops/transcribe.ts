@@ -1,5 +1,5 @@
 import { existsSync } from 'node:fs';
-import { writeFile } from 'node:fs/promises';
+import { readFile, writeFile } from 'node:fs/promises';
 import {
   mediaFileName,
   patchMeta,
@@ -46,6 +46,82 @@ export type TranscribeEnvironment = WhisperEnvironment & {
   scriptConverter: boolean;
 };
 
+/**
+ * Writes a transcript and everything derived from it. Markdown, SRT and VTT are
+ * views of the same segments, so they are rewritten together — a corrected line
+ * that reached the page but not the subtitles would be worse than the mistake.
+ */
+async function writeTranscript(
+  ctx: ApiContext,
+  id: string,
+  title: string,
+  transcript: Transcript,
+): Promise<string> {
+  const markdown = toMarkdown(title, transcript);
+  const paths = {
+    json: recordingFile(ctx, id, TRANSCRIPT_FILE),
+    md: recordingFile(ctx, id, TRANSCRIPT_MD_FILE),
+    srt: recordingFile(ctx, id, SUBTITLE_SRT_FILE),
+    vtt: recordingFile(ctx, id, SUBTITLE_VTT_FILE),
+  };
+  if (!paths.json || !paths.md || !paths.srt || !paths.vtt) {
+    throw new OpsError(400, `invalid recording id: ${id}`);
+  }
+  await writeFile(paths.json, `${JSON.stringify(transcript, null, 2)}\n`, 'utf8');
+  await writeFile(paths.md, markdown, 'utf8');
+  await writeFile(paths.srt, toSrt(transcript), 'utf8');
+  await writeFile(paths.vtt, toVtt(transcript), 'utf8');
+  return markdown;
+}
+
+/**
+ * Corrects one line. Whisper mishears names and jargon — no model does not —
+ * and a subtitle with the wrong name in it is not usable, so the text has to be
+ * fixable without re-running anything.
+ */
+export async function editTranscriptSegment(
+  ctx: ApiContext,
+  id: string,
+  index: number,
+  text: string,
+): Promise<Transcript> {
+  const meta = await readMeta(ctx, id);
+  if (!meta) throw new OpsError(404, `recording not found: ${id}`);
+
+  const jsonPath = recordingFile(ctx, id, TRANSCRIPT_FILE);
+  if (!jsonPath || !existsSync(jsonPath)) {
+    throw new OpsError(404, `not transcribed yet: ${id}`);
+  }
+  const transcript = JSON.parse(await readFile(jsonPath, 'utf8')) as Transcript;
+  if (!Number.isInteger(index) || index < 0 || index >= transcript.segments.length) {
+    throw new OpsError(
+      400,
+      `no segment ${index} — the transcript has ${transcript.segments.length}`,
+    );
+  }
+
+  const trimmed = text.trim();
+  if (!trimmed)
+    throw new OpsError(400, 'a segment cannot be emptied; delete the recording instead');
+
+  const segments = transcript.segments.map((segment, i) =>
+    i === index ? { ...segment, text: trimmed } : segment,
+  );
+  const next: Transcript = {
+    ...transcript,
+    segments,
+    text: segments.map((s) => s.text).join('\n'),
+  };
+
+  await writeTranscript(ctx, id, meta.title, next);
+  await patchMeta(ctx, id, {
+    transcript: meta.transcript
+      ? { ...meta.transcript, chars: next.text.length, segmentCount: segments.length }
+      : undefined,
+  });
+  return next;
+}
+
 export async function transcribeEnvironment(ctx: ApiContext): Promise<TranscribeEnvironment> {
   return {
     ...(await inspectEnvironment(ctx.transcribe, ctx.userCwd)),
@@ -75,6 +151,8 @@ export async function transcribeRecording(
     throw new OpsError(409, `already transcribed: ${id} — pass force to redo it`);
   }
 
+  await patchMeta(ctx, id, { transcribing: true });
+
   let transcript: Transcript;
   try {
     transcript = await transcribeFile({
@@ -87,6 +165,7 @@ export async function transcribeRecording(
       ...(opts.keepWav !== undefined ? { keepWav: opts.keepWav } : {}),
     });
   } catch (err) {
+    await patchMeta(ctx, id, { transcribing: false });
     if (err instanceof ScriptConversionUnavailableError) {
       throw new OpsError(503, `${err.message} (run \`open-recording doctor\`)`);
     }
@@ -98,15 +177,9 @@ export async function transcribeRecording(
     throw err;
   }
 
-  const markdown = toMarkdown(meta.title, transcript);
-  await writeFile(jsonPath, `${JSON.stringify(transcript, null, 2)}\n`, 'utf8');
-  await writeFile(mdPath, markdown, 'utf8');
-  // Subtitles are the same segments in the two formats a player will load.
-  const srtPath = recordingFile(ctx, id, SUBTITLE_SRT_FILE);
-  const vttPath = recordingFile(ctx, id, SUBTITLE_VTT_FILE);
-  if (srtPath) await writeFile(srtPath, toSrt(transcript), 'utf8');
-  if (vttPath) await writeFile(vttPath, toVtt(transcript), 'utf8');
+  const markdown = await writeTranscript(ctx, id, meta.title, transcript);
   await patchMeta(ctx, id, {
+    transcribing: false,
     transcript: {
       model: transcript.model,
       language: transcript.language,
