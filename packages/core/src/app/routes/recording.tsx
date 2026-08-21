@@ -96,6 +96,7 @@ export function RecordingPage() {
       </header>
 
       {meta.kind === 'screen' ? (
+        // biome-ignore lint/a11y/useMediaCaption: the cue track is added below once the recording has been transcribed; there are no captions to offer before that
         <video
           controls
           src={`/__rec/recordings/${encodeURIComponent(id)}/audio`}

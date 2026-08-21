@@ -11,7 +11,9 @@ export default defineConfig({
   // One worker: every test drives the one recorder this workspace has.
   workers: 1,
   retries: process.env.CI ? 2 : 0,
-  reporter: process.env.CI ? 'github' : 'list',
+  // The HTML report is what CI uploads when something fails; `github` is what
+  // annotates the diff.
+  reporter: process.env.CI ? [['github'], ['html', { open: 'never' }]] : 'list',
   timeout: 45_000,
   use: {
     baseURL: 'http://localhost:5288',
