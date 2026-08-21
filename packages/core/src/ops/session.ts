@@ -1,7 +1,7 @@
 import { existsSync } from 'node:fs';
 import { stat } from 'node:fs/promises';
 import path from 'node:path';
-import { probeDurationMs } from '../audio/ffmpeg.ts';
+import { probeDurationMs, remuxSeekable } from '../audio/ffmpeg.ts';
 import {
   AUDIO_FILE,
   deleteRecordingDir,
@@ -63,6 +63,32 @@ export async function reapAbandoned(ctx: ApiContext): Promise<string[]> {
     reaped.push(id);
   }
   return reaped;
+}
+
+export type RepairResult = { id: string; seekable: boolean; durationMs: number };
+
+/**
+ * Gives an already-finished recording the timeline its container never had.
+ * Recordings made before the remux existed cannot be scrubbed at all, and a
+ * player with no duration is the single most obvious way this tool feels
+ * broken.
+ */
+export async function repairRecording(ctx: ApiContext, id: string): Promise<RepairResult> {
+  const meta = await readMeta(ctx, id);
+  if (!meta) throw new OpsError(404, `recording not found: ${id}`);
+
+  const file = recordingFile(ctx, id, mediaFileName(meta));
+  if (!file || !existsSync(file)) throw new OpsError(404, `no audio for recording: ${id}`);
+
+  const ffmpeg = ctx.transcribe.ffmpeg ?? 'ffmpeg';
+  const seekable = await remuxSeekable(ffmpeg, file);
+  const durationMs = (await probeDurationMs(ffmpeg, file)) ?? meta.durationMs;
+  const next = await patchMeta(ctx, id, {
+    seekable,
+    durationMs,
+    sizeBytes: (await stat(file)).size,
+  });
+  return { id, seekable, durationMs: next?.durationMs ?? durationMs };
 }
 
 export async function startRecording(
@@ -152,12 +178,19 @@ async function finalize(ctx: ApiContext, id: string, state: RecorderState): Prom
   const current = await readMeta(ctx, id);
   const file = recordingFile(ctx, id, current ? mediaFileName(current) : AUDIO_FILE);
   const sizeBytes = file && existsSync(file) ? (await stat(file)).size : 0;
-  const probed =
-    file && sizeBytes > 0 ? await probeDurationMs(ctx.transcribe.ffmpeg ?? 'ffmpeg', file) : null;
+  const ffmpeg = ctx.transcribe.ffmpeg ?? 'ffmpeg';
+
+  // The captured file is a live stream with no timeline in it. Rewriting the
+  // container costs hundredths of a second and is what lets anyone scrub the
+  // recording afterwards; failing to is not worth refusing the recording over.
+  const seekable = file && sizeBytes > 0 ? await remuxSeekable(ffmpeg, file) : false;
+  const probed = file && sizeBytes > 0 ? await probeDurationMs(ffmpeg, file) : null;
 
   const meta = await patchMeta(ctx, id, {
     status: sizeBytes > 0 ? 'ready' : 'failed',
-    sizeBytes,
+    seekable,
+    // The remux rewrites the file, so its size is read after rather than before.
+    sizeBytes: file && existsSync(file) ? (await stat(file)).size : sizeBytes,
     durationMs: probed ?? state.durationMs,
     ...(sizeBytes > 0 ? {} : { error: state.error ?? 'no audio was captured' }),
   });

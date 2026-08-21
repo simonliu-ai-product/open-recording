@@ -81,10 +81,6 @@ jobs:
   e2e:
     runs-on: ubuntu-latest
     timeout-minutes: 20
-    container:
-      # Image version must match @playwright/test in packages/core/package.json.
-      image: mcr.microsoft.com/playwright:v1.56.1-noble
-      options: --user 1001
     steps:
       - name: Checkout
         uses: actions/checkout@v7
@@ -100,6 +96,15 @@ jobs:
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
+
+      # A recording is finalized with ffmpeg — the container it is captured in
+      # carries no timeline until it is rewritten — so the suite needs the same
+      # binary a user has, not only a browser.
+      - name: Install ffmpeg
+        run: sudo apt-get update && sudo apt-get install -y ffmpeg
+
+      - name: Install Chromium
+        run: pnpm --filter @open-recording/core exec playwright install --with-deps chromium
 
       # Chromium's fake audio device and tab-capture answer are set in
       # playwright.config.ts, so the suite records real audio and real video

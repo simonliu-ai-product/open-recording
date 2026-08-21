@@ -6,6 +6,7 @@ import {
   readTranscript,
   searchTranscripts,
 } from '../ops/recordings.ts';
+import { repairRecording } from '../ops/session.ts';
 import { transcribeEnvironment, transcribeRecording } from '../ops/transcribe.ts';
 import { formatTimestamp } from '../stt/whisper.ts';
 import { cliContext } from './context.ts';
@@ -77,6 +78,27 @@ export async function searchCommand(query: string, flags: { limit?: number } = {
   for (const hit of hits) {
     process.stdout.write(
       `${chalk.bold(hit.id)} ${chalk.dim(formatTimestamp(hit.start))}  ${hit.text}\n`,
+    );
+  }
+}
+
+/** Rewrites the container of recordings made before the remux existed. */
+export async function repairCommand(ids: string[], flags: { all?: boolean } = {}): Promise<void> {
+  const ctx = await cliContext();
+  const targets = flags.all
+    ? (await listRecordings(ctx)).filter((r) => r.status === 'ready').map((r) => r.id)
+    : ids;
+  if (targets.length === 0) {
+    process.stdout.write(chalk.dim('Nothing to repair.\n'));
+    return;
+  }
+
+  for (const id of targets) {
+    const result = await repairRecording(ctx, id);
+    process.stdout.write(
+      result.seekable
+        ? `${chalk.green('✓')} ${id} — ${formatTimestamp(result.durationMs)}, seekable\n`
+        : `${chalk.yellow('!')} ${id} — could not be rewritten; the file is unchanged\n`,
     );
   }
 }

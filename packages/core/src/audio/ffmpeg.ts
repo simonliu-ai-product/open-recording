@@ -1,4 +1,5 @@
 import { spawn } from 'node:child_process';
+import { rename, unlink } from 'node:fs/promises';
 
 export type RunResult = { code: number; stdout: string; stderr: string };
 
@@ -69,6 +70,47 @@ export function lastReportedTimeMs(stderr: string): number | null {
     Number(sec) * 1_000 +
     Number(frac.padEnd(3, '0').slice(0, 3))
   );
+}
+
+/**
+ * Rewrites the container so the file can be seeked.
+ *
+ * MediaRecorder writes a live stream: no duration in the header and no index of
+ * where the clusters are, so a player has no timeline to scrub and dragging
+ * backwards is guesswork. Copying the streams into a fresh container — no
+ * re-encoding, hundredths of a second even for a long recording — gives it
+ * both.
+ *
+ * The original is replaced only once the new file exists and reports a
+ * duration. A recording is not worth risking to a tidier container.
+ */
+export async function remuxSeekable(ffmpeg: string, file: string): Promise<boolean> {
+  const target = `${file}.seekable`;
+  try {
+    const result = await run(ffmpeg, [
+      '-y',
+      '-hide_banner',
+      '-loglevel',
+      'error',
+      '-i',
+      file,
+      '-c',
+      'copy',
+      '-f',
+      'webm',
+      target,
+    ]);
+    if (result.code !== 0) throw new Error(result.stderr.trim() || 'remux failed');
+
+    const duration = await probeDurationMs(ffmpeg, target);
+    if (!duration) throw new Error('remuxed file still reports no duration');
+
+    await rename(target, file);
+    return true;
+  } catch {
+    await unlink(target).catch(() => {});
+    return false;
+  }
 }
 
 /** Audio length in milliseconds, or null when ffmpeg is unavailable or the file is unreadable. */

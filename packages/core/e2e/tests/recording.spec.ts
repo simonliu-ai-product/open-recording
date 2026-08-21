@@ -190,6 +190,45 @@ test.describe('sorting', () => {
   });
 });
 
+test.describe('the finished file', () => {
+  test('carries a timeline a player can scrub', async ({ page }) => {
+    await armedStudio(page);
+    await control(page, 'start', { title: 'Scrubbable' });
+    await expect.poll(async () => (await status(page)).durationMs).toBeGreaterThan(0);
+    await page.waitForTimeout(1200);
+    await control(page, 'stop');
+    await expect.poll(async () => (await status(page)).status).toBe('idle');
+
+    const [id] = await listOnDisk();
+    // MediaRecorder writes a live stream with no duration and no index of where
+    // the clusters are; finalizing rewrites the container so a player has both.
+    expect((await readMeta(id)).seekable).toBe(true);
+
+    const media = await page.evaluate(async (recordingId) => {
+      const el = document.createElement('audio');
+      el.src = `/__rec/recordings/${recordingId}/audio`;
+      await new Promise((resolve) => {
+        el.onloadedmetadata = resolve;
+        el.onerror = resolve;
+        setTimeout(resolve, 6000);
+      });
+      const duration = el.duration;
+      el.currentTime = 0.5;
+      const landed = await new Promise<number | null>((resolve) => {
+        el.onseeked = () => resolve(el.currentTime);
+        setTimeout(() => resolve(null), 4000);
+      });
+      return { finite: Number.isFinite(duration), duration, landed };
+    }, id);
+
+    // Without a duration the scrub bar has no scale, which is what makes
+    // dragging backwards guesswork.
+    expect(media.finite).toBe(true);
+    expect(media.duration).toBeGreaterThan(0);
+    expect(media.landed).not.toBeNull();
+  });
+});
+
 test.describe('downloads', () => {
   test('every artefact comes back as a file, named after the recording', async ({
     page,

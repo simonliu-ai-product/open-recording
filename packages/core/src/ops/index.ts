@@ -37,8 +37,10 @@ export {
 export {
   cancelRecording,
   pauseRecording,
+  type RepairResult,
   reapAbandoned,
   recorderStatus,
+  repairRecording,
   resumeRecording,
   type StartRecordingOptions,
   startRecording,
