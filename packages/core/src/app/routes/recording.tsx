@@ -53,6 +53,17 @@ export function RecordingPage() {
     navigate('/');
   };
 
+  const downloads = [
+    { kind: 'media', label: meta?.kind === 'screen' ? 'Video' : 'Audio' },
+    ...(transcript
+      ? [
+          { kind: 'srt', label: 'SRT' },
+          { kind: 'vtt', label: 'VTT' },
+          { kind: 'transcript', label: 'Markdown' },
+        ]
+      : []),
+  ];
+
   if (!meta) {
     return (
       <p className="flex items-center gap-2 text-[13px] text-muted-foreground">
@@ -133,38 +144,19 @@ export function RecordingPage() {
           {busy ? <Loader2 className="size-3.5 animate-spin" /> : <Wand2 className="size-3.5" />}
           {transcript ? 'Transcribe again' : 'Transcribe'}
         </button>
-        {/* Plain links: the file is already on the server, and a link is the
-            one control a browser will save rather than play. */}
-        <span className="flex items-center gap-1">
-          <Download className="size-3.5 text-muted-foreground" />
-          <a
-            href={`/__rec/recordings/${encodeURIComponent(id)}/download/media`}
-            className="rounded-[6px] px-2 py-1.5 text-[12.5px] text-muted-foreground hover:bg-muted hover:text-foreground"
-          >
-            {meta.kind === 'screen' ? 'Video' : 'Audio'}
-          </a>
-          {transcript ? (
-            <>
-              <a
-                href={`/__rec/recordings/${encodeURIComponent(id)}/download/srt`}
-                className="rounded-[6px] px-2 py-1.5 text-[12.5px] text-muted-foreground hover:bg-muted hover:text-foreground"
-              >
-                SRT
-              </a>
-              <a
-                href={`/__rec/recordings/${encodeURIComponent(id)}/download/vtt`}
-                className="rounded-[6px] px-2 py-1.5 text-[12.5px] text-muted-foreground hover:bg-muted hover:text-foreground"
-              >
-                VTT
-              </a>
-              <a
-                href={`/__rec/recordings/${encodeURIComponent(id)}/download/transcript`}
-                className="rounded-[6px] px-2 py-1.5 text-[12.5px] text-muted-foreground hover:bg-muted hover:text-foreground"
-              >
-                Markdown
-              </a>
-            </>
-          ) : null}
+        {/* One control with parts, the way the filters and the view toggle
+            are — four bare links beside a solid button read as a jumble. */}
+        <span className="flex h-8 items-center rounded-[6px] border border-border bg-background p-0.5">
+          <Download className="mr-0.5 ml-1.5 size-3.5 shrink-0 text-muted-foreground" />
+          {downloads.map((item) => (
+            <a
+              key={item.kind}
+              href={`/__rec/recordings/${encodeURIComponent(id)}/download/${item.kind}`}
+              className="rounded-[4px] px-2 py-1 text-[12px] text-muted-foreground hover:bg-muted hover:text-foreground"
+            >
+              {item.label}
+            </a>
+          ))}
         </span>
 
         <button
