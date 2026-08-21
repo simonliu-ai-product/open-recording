@@ -12,6 +12,7 @@ import {
   recordingFile,
   SUBTITLE_SRT_FILE,
   SUBTITLE_VTT_FILE,
+  TRANSCRIPT_FILE,
   TRANSCRIPT_MD_FILE,
   type Transcript,
 } from '../files/store.ts';
@@ -22,6 +23,7 @@ export type RecordingSummary = Pick<
   'id' | 'title' | 'status' | 'createdAt' | 'durationMs' | 'sizeBytes' | 'tags' | 'source' | 'kind'
 > & {
   transcribed: boolean;
+  transcribing: boolean;
   hasNotes: boolean;
   /** Opening words of the transcript, so a card can show what was said. */
   preview: string | null;
@@ -40,6 +42,7 @@ function summarize(meta: RecordingMeta, ctx: ApiContext, preview: string | null)
     source: meta.source,
     kind: meta.kind ?? 'audio',
     transcribed: Boolean(meta.transcript),
+    transcribing: Boolean(meta.transcribing),
     hasNotes: Boolean(notes && existsSync(notes)),
     preview,
   };
@@ -94,6 +97,53 @@ export async function readTranscript(
     throw new OpsError(404, `not transcribed yet: ${id} — call transcribe_recording first`);
   }
   return view === 'text' ? transcript.text : transcript;
+}
+
+export type DownloadKind = 'media' | 'transcript' | 'srt' | 'vtt' | 'segments';
+
+export type Download = {
+  path: string;
+  /** What the file should be called once it is somewhere else. */
+  filename: string;
+  contentType: string;
+};
+
+const DOWNLOADS: Record<DownloadKind, { file: string | null; type: string; suffix: string }> = {
+  media: { file: null, type: 'application/octet-stream', suffix: '' },
+  transcript: { file: TRANSCRIPT_MD_FILE, type: 'text/markdown; charset=utf-8', suffix: '.md' },
+  srt: { file: SUBTITLE_SRT_FILE, type: 'application/x-subrip; charset=utf-8', suffix: '.srt' },
+  vtt: { file: SUBTITLE_VTT_FILE, type: 'text/vtt; charset=utf-8', suffix: '.vtt' },
+  segments: { file: TRANSCRIPT_FILE, type: 'application/json; charset=utf-8', suffix: '.json' },
+};
+
+/**
+ * A recording is a directory on the user's disk, which is no use to them once
+ * they want the subtitles in an editor. Every artefact is named after the
+ * recording rather than after its slot in that directory, so five downloads
+ * do not all arrive called `transcript`.
+ */
+export async function downloadPath(
+  ctx: ApiContext,
+  id: string,
+  kind: DownloadKind,
+): Promise<Download> {
+  const meta = await readRecording(ctx, id);
+  const spec = DOWNLOADS[kind];
+  const name = spec.file ?? mediaFileName(meta);
+  const file = recordingFile(ctx, id, name);
+  if (!file || !existsSync(file)) {
+    throw new OpsError(
+      404,
+      kind === 'media' ? `no audio for recording: ${id}` : `not transcribed yet: ${id}`,
+    );
+  }
+  return {
+    path: file,
+    filename: spec.file
+      ? `${id}${spec.suffix}`
+      : `${id}${meta.kind === 'screen' ? '.webm' : '.webm'}`,
+    contentType: spec.file ? spec.type : meta.kind === 'screen' ? 'video/webm' : 'audio/webm',
+  };
 }
 
 /** The stored cues, in the format a player or an editor asked for. */
