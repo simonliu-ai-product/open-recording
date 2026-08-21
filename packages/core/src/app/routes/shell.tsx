@@ -41,6 +41,20 @@ export function Shell() {
     if (state.recorder.status !== 'arming') refresh();
   }, [refresh, state.recorder.status]);
 
+  // `transcribe.auto` starts whisper after the stop has been answered, so the
+  // only way the page learns it finished is by looking again.
+  const working = (recordings ?? []).some((recording) => recording.transcribing);
+  useEffect(() => {
+    if (!working) return;
+    const timer = window.setInterval(refresh, 2000);
+    return () => window.clearInterval(timer);
+  }, [working, refresh]);
+
+  // The device list is worth having before the menu is opened, even unnamed.
+  useEffect(() => {
+    void studio.listDevices();
+  }, []);
+
   useEffect(() => {
     document.title =
       state.recorder.status === 'recording' ? '● Recording — open-recording' : 'open-recording';
