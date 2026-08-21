@@ -1,5 +1,12 @@
 import { expect, test } from '@playwright/test';
-import { chooseSource, clearRecordings, control, listOnDisk, readMeta, status } from './helpers.ts';
+import {
+  chooseSource,
+  clearRecordings,
+  control,
+  finalized,
+  listOnDisk,
+  status,
+} from './helpers.ts';
 
 test.beforeEach(async () => {
   await clearRecordings();
@@ -25,7 +32,7 @@ test.describe('recording a tab', () => {
     await expect.poll(async () => (await status(page)).status).toBe('idle');
 
     const [id] = await listOnDisk();
-    const meta = await readMeta(id);
+    const meta = await finalized(id);
     expect(meta.kind).toBe('screen');
     expect(meta.file).toBe('screen.webm');
     expect(meta.sizeBytes).toBeGreaterThan(1000);

@@ -34,6 +34,19 @@ export async function listOnDisk(): Promise<string[]> {
   return (await readdir(RECORDINGS)).filter((entry) => entry !== '.gitkeep').sort();
 }
 
+/**
+ * Waits for the recording to be written, not merely for the recorder to go
+ * quiet. The hub returns to idle when the studio has flushed; finalizing —
+ * rewriting the container, measuring it — happens after that, and asserting on
+ * the metadata before it lands is a race that only a fast machine wins.
+ */
+export async function finalized(id: string): Promise<Meta> {
+  await expect
+    .poll(async () => (await readMeta(id)).status, { timeout: 20_000 })
+    .not.toBe('recording');
+  return await readMeta(id);
+}
+
 export async function readMeta(id: string): Promise<Meta> {
   return JSON.parse(await readFile(path.join(RECORDINGS, id, 'meta.json'), 'utf8')) as Meta;
 }
