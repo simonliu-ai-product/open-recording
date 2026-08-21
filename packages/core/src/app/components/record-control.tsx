@@ -81,9 +81,9 @@ export function RecordControl({ state, onChanged }: Props) {
    * tab picker both need a user gesture, and neither can be answered by an
    * agent. Everything after that — start, pause, stop — can be.
    */
-  const take = async (kind: CaptureKind) => {
+  const take = async (kind: CaptureKind, deviceId?: string) => {
     if (kind === 'screen') await studio.armScreen();
-    else await studio.arm();
+    else await studio.arm(deviceId);
   };
 
   const record = () =>
@@ -140,7 +140,7 @@ export function RecordControl({ state, onChanged }: Props) {
           )}
 
           {menuOpen ? (
-            <div className="absolute top-12 left-0 z-10 min-w-[190px] rounded-[6px] border border-border bg-card p-1 shadow-floating">
+            <div className="absolute top-12 left-0 z-10 min-w-[230px] rounded-[6px] border border-border bg-card p-1 shadow-floating">
               {SOURCES.map((option) => {
                 const Icon = option.icon;
                 return (
@@ -164,6 +164,38 @@ export function RecordControl({ state, onChanged }: Props) {
                   </button>
                 );
               })}
+
+              {/* A named input only appears once permission has been given —
+                  before that the browser will not say what anything is called.
+                  A virtual device shows up here like any other, which is how a
+                  workspace records what the machine is playing. */}
+              {state.devices.length > 1 && current === 'audio' ? (
+                <>
+                  <p className="eyebrow mt-1.5 mb-1 px-2">Input</p>
+                  {state.devices.map((device) => (
+                    <button
+                      key={device.id}
+                      type="button"
+                      onMouseDown={() => {
+                        setMenuOpen(false);
+                        void act(() => take('audio', device.id));
+                      }}
+                      aria-current={device.id === state.deviceId}
+                      className={cn(
+                        'flex w-full items-center gap-2 rounded-[4px] px-2 py-1.5 text-left text-[12.5px] hover:bg-muted',
+                        device.id === state.deviceId && 'font-medium',
+                      )}
+                    >
+                      <span className="flex-1 truncate">{device.label}</span>
+                      {device.id === state.deviceId ? (
+                        <span className="folio" aria-hidden>
+                          ✓
+                        </span>
+                      ) : null}
+                    </button>
+                  ))}
+                </>
+              ) : null}
             </div>
           ) : null}
         </div>
