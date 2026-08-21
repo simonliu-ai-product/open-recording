@@ -78,6 +78,15 @@ export async function run(argv: string[]): Promise<void> {
     });
 
   program
+    .command('repair [ids...]')
+    .description('Rewrite a recording’s container so players can scrub it')
+    .option('--all', 'every finished recording')
+    .action(async (ids: string[], flags) => {
+      const { repairCommand } = await import('./commands.ts');
+      await repairCommand(ids, flags);
+    });
+
+  program
     .command('rm <ids...>')
     .description('Delete recordings')
     .action(async (ids: string[]) => {

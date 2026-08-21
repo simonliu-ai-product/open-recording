@@ -41,6 +41,8 @@ export type RecordingMeta = {
   tags: string[];
   /** Set while whisper is working on it, so the list can say so. */
   transcribing?: boolean;
+  /** Whether the container carries a timeline a player can scrub. */
+  seekable?: boolean;
   /** Who pressed record — an agent tool call or a person in the studio UI. */
   source: 'agent' | 'studio';
   note?: string;
