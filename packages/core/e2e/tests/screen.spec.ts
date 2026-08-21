@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test';
-import { clearRecordings, control, listOnDisk, readMeta, status } from './helpers.ts';
+import { chooseSource, clearRecordings, control, listOnDisk, readMeta, status } from './helpers.ts';
 
 test.beforeEach(async () => {
   await clearRecordings();
@@ -12,8 +12,8 @@ test.describe('recording a tab', () => {
 
     // Chrome answers its own picker here (see playwright.config.ts); a person
     // picks the tab themselves, which is why this is a button and not a tool.
-    await page.getByRole('button', { name: 'Record a tab' }).click();
-    await expect(page.getByRole('button', { name: 'Sharing a tab' })).toBeVisible();
+    await chooseSource(page, 'A browser tab');
+    await expect(page.getByText('Sharing a tab')).toBeVisible();
 
     await control(page, 'start', { title: 'Tab capture' });
     await expect.poll(async () => (await status(page)).status).toBe('recording');

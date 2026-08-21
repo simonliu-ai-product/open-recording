@@ -3,13 +3,26 @@ import { useEffect, useMemo, useState } from 'react';
 import { Link, useOutletContext } from 'react-router-dom';
 import { RecordControl } from '../components/record-control';
 import { RecordingCard } from '../components/recording-card';
-import { ALL_ID, PENDING_ID, TRANSCRIBED_ID } from '../components/sidebar';
+import { ALL_ID } from '../components/sidebar';
 import { api, formatDuration, type RecordingSummary, type TranscriptHit } from '../lib/api';
 import { cn } from '../lib/utils';
 import type { ShellContext } from './shell';
 import { useStudioState } from './shell';
 
 type SortKey = 'newest' | 'oldest' | 'longest' | 'title';
+
+type Filter = 'all' | 'transcribed' | 'pending';
+
+/**
+ * A filter, not a page. These used to be three sidebar entries that rendered
+ * the same cards over the same recordings — a difference the navigation was
+ * claiming and the content never showed.
+ */
+const FILTERS: Array<{ key: Filter; label: string }> = [
+  { key: 'all', label: 'All' },
+  { key: 'transcribed', label: 'Transcribed' },
+  { key: 'pending', label: 'Pending' },
+];
 
 const SORTS: Array<{ key: SortKey; label: string }> = [
   { key: 'newest', label: 'Newest' },
@@ -20,8 +33,6 @@ const SORTS: Array<{ key: SortKey; label: string }> = [
 
 const VIEW_LABELS: Record<string, { icon: string; title: string }> = {
   [ALL_ID]: { icon: '🎙️', title: 'Recordings' },
-  [TRANSCRIBED_ID]: { icon: '📝', title: 'Transcribed' },
-  [PENDING_ID]: { icon: '⏳', title: 'Pending' },
 };
 
 function sortRecordings(list: RecordingSummary[], key: SortKey): RecordingSummary[] {
@@ -39,6 +50,7 @@ export function Home() {
   const [query, setQuery] = useState('');
   const [sort, setSort] = useState<SortKey>('newest');
   const [sortOpen, setSortOpen] = useState(false);
+  const [filter, setFilter] = useState<Filter>('all');
   const [hits, setHits] = useState<TranscriptHit[]>([]);
 
   // Titles filter locally; what was *said* only exists in the stored
@@ -70,9 +82,9 @@ export function Home() {
 
   const visible = useMemo(() => {
     let list = recordings ?? [];
-    if (selectedId === TRANSCRIBED_ID) list = list.filter((r) => r.transcribed);
-    else if (selectedId === PENDING_ID) list = list.filter((r) => !r.transcribed);
-    else if (selectedId !== ALL_ID) list = list.filter((r) => r.tags.includes(selectedId));
+    if (selectedId !== ALL_ID) list = list.filter((r) => r.tags.includes(selectedId));
+    if (filter === 'transcribed') list = list.filter((r) => r.transcribed);
+    else if (filter === 'pending') list = list.filter((r) => !r.transcribed);
 
     const needle = query.trim().toLowerCase();
     if (needle) {
@@ -83,7 +95,7 @@ export function Home() {
       );
     }
     return sortRecordings(list, sort);
-  }, [recordings, selectedId, query, sort]);
+  }, [recordings, selectedId, filter, query, sort]);
 
   return (
     <>
@@ -96,6 +108,24 @@ export function Home() {
           <span className="folio self-end pb-2">{visible.length.toString().padStart(2, '0')}</span>
 
           <div className="ml-auto flex w-full items-center gap-2 md:w-auto">
+            <div className="flex h-8 shrink-0 items-center rounded-[6px] border border-border bg-background p-0.5">
+              {FILTERS.map((option) => (
+                <button
+                  key={option.key}
+                  type="button"
+                  onClick={() => setFilter(option.key)}
+                  className={cn(
+                    'rounded-[4px] px-2 py-1 text-[12px]',
+                    filter === option.key
+                      ? 'bg-muted font-medium text-foreground'
+                      : 'text-muted-foreground hover:text-foreground',
+                  )}
+                >
+                  {option.label}
+                </button>
+              ))}
+            </div>
+
             <div className="relative w-full md:w-[240px]">
               <Search className="-translate-y-1/2 pointer-events-none absolute top-1/2 left-2.5 size-3.5 text-muted-foreground" />
               <input

@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState, useSyncExternalStore } from 'react';
 import { Outlet, useLocation, useNavigate, useSearchParams } from 'react-router-dom';
-import { ALL_ID, SETUP_ID, Sidebar, type SidebarCounts } from '../components/sidebar';
+import { ALL_ID, SETUP_ID, Sidebar } from '../components/sidebar';
 import { api, type RecordingSummary } from '../lib/api';
 import { studio } from '../lib/studio';
 
@@ -46,12 +46,6 @@ export function Shell() {
       state.recorder.status === 'recording' ? '● Recording — open-recording' : 'open-recording';
   }, [state.recorder.status]);
 
-  const counts = useMemo<SidebarCounts>(() => {
-    const list = recordings ?? [];
-    const transcribed = list.filter((r) => r.transcribed).length;
-    return { all: list.length, transcribed, pending: list.length - transcribed };
-  }, [recordings]);
-
   const tags = useMemo(() => {
     const counter = new Map<string, number>();
     for (const recording of recordings ?? []) {
@@ -77,7 +71,7 @@ export function Shell() {
     <div className="flex h-dvh overflow-hidden bg-background text-foreground">
       <div className="hidden md:block">
         <Sidebar
-          counts={counts}
+          count={recordings?.length ?? 0}
           tags={tags}
           selectedId={selectedId}
           onSelect={select}

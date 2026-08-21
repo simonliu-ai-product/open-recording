@@ -48,8 +48,17 @@ export async function audioSize(id: string): Promise<number> {
 export async function armedStudio(page: Page): Promise<void> {
   await page.goto('/');
   await expect(page.getByText('connected', { exact: true })).toBeVisible();
-  await page.getByRole('button', { name: 'Arm microphone' }).click();
-  await expect(page.getByRole('button', { name: 'Microphone armed' })).toBeVisible();
+  await chooseSource(page, 'Microphone');
+  await expect(page.getByText('Microphone ready')).toBeVisible();
+}
+
+/**
+ * Picks a source from the record button's menu, which is where taking one
+ * happens: the permission prompt and Chrome's tab picker both need the click.
+ */
+export async function chooseSource(page: Page, label: string): Promise<void> {
+  await page.getByRole('button', { name: 'Choose what to record' }).click();
+  await page.getByRole('button', { name: label, exact: true }).click();
 }
 
 /** The recorder's own view of itself, straight from the dev API. */
