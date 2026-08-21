@@ -4,6 +4,7 @@ import {
   audioSize,
   clearRecordings,
   control,
+  finalized,
   listOnDisk,
   readMeta,
   status,
@@ -32,7 +33,7 @@ test.describe('the studio records', () => {
 
     const [id] = await listOnDisk();
     expect(id).toBeTruthy();
-    const meta = await readMeta(id);
+    const meta = await finalized(id);
     expect(meta.title).toBe('Fixture session');
     expect(meta.status).toBe('ready');
     // Real Opus from the fake device, not an empty file.
@@ -202,7 +203,7 @@ test.describe('the finished file', () => {
     const [id] = await listOnDisk();
     // MediaRecorder writes a live stream with no duration and no index of where
     // the clusters are; finalizing rewrites the container so a player has both.
-    expect((await readMeta(id)).seekable).toBe(true);
+    expect((await finalized(id)).seekable).toBe(true);
 
     const media = await page.evaluate(async (recordingId) => {
       const el = document.createElement('audio');

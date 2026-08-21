@@ -4,8 +4,8 @@ import {
   audioSize,
   clearRecordings,
   control,
+  finalized,
   listOnDisk,
-  readMeta,
   status,
 } from './helpers.ts';
 
@@ -38,7 +38,7 @@ test.describe('pausing', () => {
     const ids = await listOnDisk();
     expect(ids).toHaveLength(1);
     expect(await audioSize(ids[0])).toBeGreaterThan(1000);
-    expect((await readMeta(ids[0])).status).toBe('ready');
+    expect((await finalized(ids[0])).status).toBe('ready');
   });
 
   test('the clock does not run while the recorder is paused', async ({ page }) => {
@@ -61,7 +61,7 @@ test.describe('pausing', () => {
     await expect.poll(async () => (await status(page)).status).toBe('idle');
 
     const [id] = await listOnDisk();
-    const meta = await readMeta(id);
+    const meta = await finalized(id);
     // The paused span is absent from the audio, so the measured length is the
     // captured length — nowhere near the wall-clock time the session was open.
     expect(meta.durationMs).toBeLessThan(2000);
@@ -104,7 +104,7 @@ test.describe('pausing', () => {
     await expect.poll(async () => (await status(page)).status).toBe('idle');
 
     const [id] = await listOnDisk();
-    expect((await readMeta(id)).status).toBe('ready');
+    expect((await finalized(id)).status).toBe('ready');
     expect(await audioSize(id)).toBeGreaterThan(1000);
   });
 });
