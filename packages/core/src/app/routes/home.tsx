@@ -1,8 +1,19 @@
-import { ChevronDown, Clock, Loader2, Search, Timer, Type, X } from 'lucide-react';
+import {
+  ChevronDown,
+  Clock,
+  LayoutGrid,
+  List,
+  Loader2,
+  Search,
+  Timer,
+  Type,
+  X,
+} from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 import { Link, useOutletContext } from 'react-router-dom';
 import { RecordControl } from '../components/record-control';
 import { RecordingCard } from '../components/recording-card';
+import { RecordingTable } from '../components/recording-table';
 import { ALL_ID } from '../components/sidebar';
 import { api, formatDuration, type RecordingSummary, type TranscriptHit } from '../lib/api';
 import { cn } from '../lib/utils';
@@ -18,6 +29,10 @@ type Filter = 'all' | 'transcribed' | 'pending';
  * the same cards over the same recordings — a difference the navigation was
  * claiming and the content never showed.
  */
+type View = 'grid' | 'table';
+
+const VIEW_KEY = 'open-recording:view';
+
 const FILTERS: Array<{ key: Filter; label: string }> = [
   { key: 'all', label: 'All' },
   { key: 'transcribed', label: 'Transcribed' },
@@ -51,6 +66,14 @@ export function Home() {
   const [sort, setSort] = useState<SortKey>('newest');
   const [sortOpen, setSortOpen] = useState(false);
   const [filter, setFilter] = useState<Filter>('all');
+  const [layout, setLayout] = useState<View>(() =>
+    localStorage.getItem(VIEW_KEY) === 'table' ? 'table' : 'grid',
+  );
+
+  const showAs = (next: View) => {
+    setLayout(next);
+    localStorage.setItem(VIEW_KEY, next);
+  };
   const [hits, setHits] = useState<TranscriptHit[]>([]);
 
   // Titles filter locally; what was *said* only exists in the stored
@@ -146,6 +169,33 @@ export function Home() {
               ) : null}
             </div>
 
+            <div className="flex h-8 shrink-0 items-center rounded-[6px] border border-border bg-background p-0.5">
+              <button
+                type="button"
+                onClick={() => showAs('grid')}
+                aria-label="Show as cards"
+                aria-pressed={layout === 'grid'}
+                className={cn(
+                  'grid size-6 place-items-center rounded-[4px]',
+                  layout === 'grid' ? 'bg-muted text-foreground' : 'text-muted-foreground',
+                )}
+              >
+                <LayoutGrid className="size-3.5" />
+              </button>
+              <button
+                type="button"
+                onClick={() => showAs('table')}
+                aria-label="Show as a table"
+                aria-pressed={layout === 'table'}
+                className={cn(
+                  'grid size-6 place-items-center rounded-[4px]',
+                  layout === 'table' ? 'bg-muted text-foreground' : 'text-muted-foreground',
+                )}
+              >
+                <List className="size-3.5" />
+              </button>
+            </div>
+
             <div className="relative">
               <button
                 type="button"
@@ -227,6 +277,8 @@ export function Home() {
               : 'Press record above, or ask an agent to start a recording.'}
           </p>
         </div>
+      ) : layout === 'table' ? (
+        <RecordingTable recordings={visible} />
       ) : (
         <ul className="grid grid-cols-[repeat(auto-fill,minmax(240px,1fr))] gap-x-6 gap-y-9 md:grid-cols-[repeat(auto-fill,minmax(300px,1fr))]">
           {visible.map((recording) => (

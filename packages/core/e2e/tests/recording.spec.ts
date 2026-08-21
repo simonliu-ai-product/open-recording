@@ -95,3 +95,32 @@ test.describe('the studio records', () => {
     expect(await listOnDisk()).toEqual([]);
   });
 });
+
+test.describe('the list', () => {
+  test('shows the same recordings as cards or as a table', async ({ page }) => {
+    await armedStudio(page);
+    await control(page, 'start', { title: 'Listed', tags: ['team'] });
+    await expect.poll(async () => (await status(page)).durationMs).toBeGreaterThan(0);
+    await control(page, 'stop');
+    await expect.poll(async () => (await status(page)).status).toBe('idle');
+
+    // Cards first, which is the default.
+    await expect(page.getByRole('link', { name: /Listed/ })).toBeVisible();
+    expect(await page.locator('table').count()).toBe(0);
+
+    await page.getByRole('button', { name: 'Show as a table' }).click();
+    const row = page.locator('table tbody tr');
+    await expect(row).toHaveCount(1);
+    await expect(row).toContainText('Listed');
+    // A table earns its place by showing what a card only hints at.
+    await expect(row).toContainText('team');
+    await expect(page.locator('table thead')).toContainText('Length');
+
+    // The choice survives a reload, because it is a preference, not a mode.
+    await page.reload();
+    await expect(page.locator('table tbody tr')).toHaveCount(1);
+
+    await page.getByRole('button', { name: 'Show as cards' }).click();
+    expect(await page.locator('table').count()).toBe(0);
+  });
+});
