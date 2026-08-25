@@ -1,10 +1,25 @@
 # open-recording
 
+[![CI](https://github.com/simonliu-ai-product/open-recording/actions/workflows/ci.yml/badge.svg)](https://github.com/simonliu-ai-product/open-recording/actions/workflows/ci.yml)
+[![npm](https://img.shields.io/npm/v/@open-recording/core?style=flat)](https://www.npmjs.com/package/@open-recording/core)
+[![GitHub stars](https://img.shields.io/github/stars/simonliu-ai-product/open-recording?style=flat)](https://github.com/simonliu-ai-product/open-recording/stargazers)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg?style=flat)](https://opensource.org/licenses/MIT)
+
+**English** · [繁體中文](README.zh-TW.md)
+
 Record in the browser. Transcribe locally. Let an agent drive both.
 
 `open-recording` gives an AI agent a real record button: it presses start, a studio page in your browser captures the microphone, and when it presses stop the audio lands on your disk and gets transcribed by whisper.cpp — no audio leaves the machine.
 
 Built the same way as [open-doc](https://github.com/simonliu-ai-product/open-doc) and open-slide: a Vite dev server, one `ops` layer, and an MCP endpoint mounted on it.
+
+```bash
+npx open-recording dev --mcp
+```
+
+<img src=".github/assets/studio.png" alt="The studio: every recording is a card carrying the opening words of its transcript, with the record button and its source at the top." width="100%">
+
+<sub>The studio. Every recording is a card carrying the opening words of its transcript — a recording's content is its words, not a waveform.</sub>
 
 ## Quick start
 
@@ -26,6 +41,10 @@ npx open-recording doctor   # confirms ffmpeg, the binary, and the model
 
 `doctor` prints the fix for anything missing. Recording works without any of it; only transcription is refused.
 
+<img src=".github/assets/setup.png" alt="Setup in the browser: what ffmpeg, whisper.cpp and the model resolved to, and every directory the model was looked for in." width="100%">
+
+<sub>The same check inside the studio. A missing binary or model is a setup problem with a fix printed next to it, never a recording that silently fails to transcribe.</sub>
+
 ## How an agent uses it
 
 Point your agent at the MCP endpoint (`http://localhost:5274/mcp`), then:
@@ -46,6 +65,10 @@ Point your agent at the MCP endpoint (`http://localhost:5274/mcp`), then:
 A typical run: `start_recording` → the meeting happens → `stop_recording {transcribe: true}` → `read_transcript` → `write_notes` with the summary.
 
 `start_recording` waits for the studio page to acknowledge that `MediaRecorder` is actually running. If the tab is closed or the mic is blocked, the agent gets a refusal that says so — never a success for a recording nobody is making.
+
+<img src=".github/assets/recording.png" alt="One recording: a seekable player, downloads for the audio, SRT, VTT and Markdown, and the notes an agent wrote beside it." width="100%">
+
+<sub>One recording, with the summary an agent parked in <code>notes.md</code> after the meeting. The audio, the subtitles and the Markdown all download from here.</sub>
 
 ## CLI
 
@@ -72,6 +95,10 @@ recordings/
 ```
 
 No database, no index. The filesystem is the truth, and ids sort chronologically.
+
+<img src=".github/assets/table.png" alt="The same recordings as a table, sortable by any heading, showing length, size and tags." width="100%">
+
+<sub>The same directory listing, as a table. Sort by any heading; the icon says whether a recording came from a microphone or a tab.</sub>
 
 ## Recording a browser tab
 
