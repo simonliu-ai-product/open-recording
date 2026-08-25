@@ -1,6 +1,6 @@
 {
   "name": "@open-recording/core",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Runtime and CLI for open-recording \u2014 a browser recording studio an agent can drive, with local whisper.cpp transcription.",
   "type": "module",
   "exports": {

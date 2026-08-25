@@ -1,6 +1,6 @@
 {
   "name": "@open-recording/mcp",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "MCP server for open-recording — lets any agent framework press record, stop, transcribe, and read back the transcript.",
   "type": "module",
   "exports": {
@@ -51,7 +51,7 @@
     "zod": "^4.4.3"
   },
   "peerDependencies": {
-    "@open-recording/core": "^0.1.0"
+    "@open-recording/core": "^0.2.0"
   },
   "devDependencies": {
     "@open-recording/core": "workspace:*",
