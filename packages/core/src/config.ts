@@ -1,7 +1,7 @@
 export type TranscribeConfig = {
   /** whisper.cpp binary. Defaults to `whisper-cli`, then `whisper-cpp`, on PATH. */
   bin?: string;
-  /** Absolute path to a ggml model. Defaults to the first model found in the usual caches. */
+  /** Path to a ggml model, absolute or relative to the workspace. Defaults to the largest one found in the usual caches. */
   model?: string;
   /** BCP-47-ish code whisper.cpp understands, or `auto`. Defaults to `auto`. */
   language?: string;
