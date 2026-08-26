@@ -1,5 +1,11 @@
 # @open-recording/core
 
+## 0.2.1
+
+### Patch Changes
+
+- [#15](https://github.com/simonliu-ai-product/open-recording/pull/15) [`e474f7a`](https://github.com/simonliu-ai-product/open-recording/commit/e474f7a157ab40d6770485e3e27ee1d1c33af21a) Thanks [@LiuYuWei](https://github.com/LiuYuWei)! - Move the studio to React 19. Nothing in the app needed changing — the dependency, its types and `react-dom` all move together, which is the part that matters: React 19 with react-dom 18 does not render at all.
+
 ## 0.2.0
 
 ### Minor Changes
