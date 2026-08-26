@@ -51,7 +51,7 @@
     "zod": "^4.4.3"
   },
   "peerDependencies": {
-    "@open-recording/core": "^0.2.0"
+    "@open-recording/core": "^0.2.1"
   },
   "devDependencies": {
     "@open-recording/core": "workspace:*",
