@@ -13,6 +13,10 @@ concurrency:
 permissions:
   contents: write
   pull-requests: write
+  # Trusted publishing: npm verifies this run against the publisher configured
+  # on the package, so no token is involved. A 2FA-bypass token cannot publish
+  # any more — npm restricts those from direct publishing.
+  id-token: write
 
 jobs:
   release:
@@ -45,4 +49,3 @@ jobs:
           title: 'Version packages'
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
