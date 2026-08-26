@@ -5,7 +5,7 @@
 [![GitHub stars](https://img.shields.io/github/stars/simonliu-ai-product/open-recording?style=flat)](https://github.com/simonliu-ai-product/open-recording/stargazers)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg?style=flat)](https://opensource.org/licenses/MIT)
 
-[English](README.md) · **繁體中文**
+[English](README.md) · **繁體中文** · [costaffs.app/tools/open-recording](https://costaffs.app/zhtw/tools/open-recording/)
 
 在瀏覽器錄音，在本機轉錄，讓 agent 兩件都能自己來。
 

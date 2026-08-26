@@ -5,7 +5,7 @@
 [![GitHub stars](https://img.shields.io/github/stars/simonliu-ai-product/open-recording?style=flat)](https://github.com/simonliu-ai-product/open-recording/stargazers)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg?style=flat)](https://opensource.org/licenses/MIT)
 
-**English** · [繁體中文](README.zh-TW.md)
+**English** · [繁體中文](README.zh-TW.md) · [costaffs.app/tools/open-recording](https://costaffs.app/tools/open-recording/)
 
 Record in the browser. Transcribe locally. Let an agent drive both.
 
