@@ -24,7 +24,7 @@
     "release": "turbo run build --filter=@open-recording/core --filter=@open-recording/mcp && changeset publish"
   },
   "devDependencies": {
-    "@biomejs/biome": "2.5.7",
+    "@biomejs/biome": "2.5.9",
     "@changesets/changelog-github": "^0.7.0",
     "@changesets/cli": "^3.0.0",
     "turbo": "^2.10.8",
