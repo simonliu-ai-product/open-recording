@@ -1,3 +1,8 @@
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset=".github/assets/preview-dark.png">
+  <img src=".github/assets/preview.png" alt="open-recording——為 agent 打造的錄音工作室。" width="100%">
+</picture>
+
 # open-recording
 
 [![CI](https://github.com/simonliu-ai-product/open-recording/actions/workflows/ci.yml/badge.svg)](https://github.com/simonliu-ai-product/open-recording/actions/workflows/ci.yml)
