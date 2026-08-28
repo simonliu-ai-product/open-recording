@@ -41,7 +41,7 @@ jobs:
       # With changesets pending this opens or updates the release PR; with none
       # pending — the merge of that PR — `pnpm release` builds and publishes.
       - name: Create release PR or publish
-        uses: changesets/action@v1
+        uses: changesets/action@v2
         with:
           version: pnpm version-packages
           publish: pnpm release
