@@ -1,6 +1,7 @@
-import { Check, Loader2, X } from 'lucide-react';
-import { useEffect, useState } from 'react';
+import { Check, Loader2, RefreshCw, X } from 'lucide-react';
+import { useCallback, useEffect, useState } from 'react';
 import { api, type WhisperEnvironment } from '../lib/api';
+import { useLocale } from '../lib/i18n';
 
 const MODEL_URL =
   'https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-large-v3-turbo.bin';
@@ -27,19 +28,25 @@ function Row({ label, value, hint }: { label: string; value: string | null; hint
 
 /** The browser half of `open-recording doctor` — same checks, same fixes. */
 export function SetupPage() {
+  const { t } = useLocale();
   const [env, setEnv] = useState<WhisperEnvironment | null>(null);
+  const [checking, setChecking] = useState(false);
 
-  useEffect(() => {
+  const recheck = useCallback(() => {
+    setChecking(true);
     void api
       .environment()
       .then(setEnv)
-      .catch(() => setEnv(null));
+      .catch(() => setEnv(null))
+      .finally(() => setChecking(false));
   }, []);
+
+  useEffect(recheck, [recheck]);
 
   if (!env) {
     return (
       <p className="flex items-center gap-2 text-[13px] text-muted-foreground">
-        <Loader2 className="size-4 animate-spin" /> Loading
+        <Loader2 className="size-4 animate-spin" /> {t('home.loading')}
       </p>
     );
   }
@@ -52,11 +59,20 @@ export function SetupPage() {
       <header className="mb-8">
         <div className="flex flex-wrap items-center gap-3">
           <span className="grid size-7 place-items-center text-2xl">⚙️</span>
-          <h1 className="font-semibold text-[32px] leading-[1.05] tracking-[-0.025em]">Setup</h1>
+          <h1 className="font-semibold text-[32px] leading-[1.05] tracking-[-0.025em]">
+            {t('setup.title')}
+          </h1>
+          <button
+            type="button"
+            onClick={recheck}
+            disabled={checking}
+            className="ml-auto inline-flex h-8 items-center gap-1.5 rounded-[6px] border border-border bg-background px-2.5 text-[12px] text-muted-foreground hover:bg-muted hover:text-foreground"
+          >
+            <RefreshCw className={`size-3.5 ${checking ? 'animate-spin' : ''}`} />
+            {t('setup.recheck')}
+          </button>
         </div>
-        <p className="mt-3 text-[13px] text-muted-foreground">
-          Recording works without any of this. Transcription is refused until all three resolve.
-        </p>
+        <p className="mt-3 text-[13px] text-muted-foreground">{t('setup.subtitle')}</p>
       </header>
 
       <ul className="divide-y divide-hairline overflow-hidden rounded-[8px] border border-hairline bg-card">
@@ -77,11 +93,10 @@ export function SetupPage() {
       </ul>
 
       {ready ? (
-        <p className="mt-4 text-[13px] text-muted-foreground">
-          Ready — recordings can be transcribed locally.
-        </p>
+        <p className="mt-4 text-[13px] text-muted-foreground">{t('setup.ready')}</p>
       ) : (
         <section className="mt-6">
+          <p className="mb-3 text-[13px] text-muted-foreground">{t('setup.notReady')}</p>
           <p className="eyebrow mb-3">Fix it</p>
           <pre className="overflow-x-auto rounded-[8px] border border-hairline bg-card p-4 font-mono text-[11.5px] leading-relaxed">
             {`brew install whisper-cpp ffmpeg\nmkdir -p ${env.modelSearchDirs[0]}\ncurl -L -o ${env.modelSearchDirs[0]}/ggml-large-v3-turbo.bin \\\n  ${MODEL_URL}`}

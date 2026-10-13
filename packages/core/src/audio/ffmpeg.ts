@@ -135,3 +135,58 @@ export async function probeDurationMs(ffmpeg: string, input: string): Promise<nu
     return null;
   }
 }
+
+/**
+ * Converts an imported media file (.mp3, .m4a, .wav, .mp4, .mov, .webm) into a
+ * seekable WebM container inside the recording directory.
+ */
+export async function transcodeToWebm(
+  ffmpeg: string,
+  input: string,
+  output: string,
+  kind: 'audio' | 'screen',
+): Promise<boolean> {
+  const args =
+    kind === 'screen'
+      ? [
+          '-y',
+          '-hide_banner',
+          '-loglevel',
+          'error',
+          '-i',
+          input,
+          '-c:v',
+          'libvpx-vp9',
+          '-crf',
+          '32',
+          '-b:v',
+          '0',
+          '-c:a',
+          'libopus',
+          '-f',
+          'webm',
+          output,
+        ]
+      : [
+          '-y',
+          '-hide_banner',
+          '-loglevel',
+          'error',
+          '-i',
+          input,
+          '-vn',
+          '-c:a',
+          'libopus',
+          '-b:a',
+          '96k',
+          '-f',
+          'webm',
+          output,
+        ];
+  try {
+    const result = await run(ffmpeg, args);
+    return result.code === 0;
+  } catch {
+    return false;
+  }
+}

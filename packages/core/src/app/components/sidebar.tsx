@@ -1,8 +1,10 @@
 import config from 'virtual:open-recording/config';
-import { Moon, Sun } from 'lucide-react';
+import { Moon, Search, Sun } from 'lucide-react';
 import { useTheme } from 'next-themes';
+import { useT } from '../lib/i18n';
 import type { StudioState } from '../lib/studio';
 import { cn } from '../lib/utils';
+import { LanguageMenu } from './language-menu';
 
 export const ALL_ID = '__all__';
 export const SETUP_ID = '__setup__';
@@ -44,37 +46,54 @@ type Props = {
   tags: Array<{ name: string; count: number }>;
   selectedId: string;
   onSelect: (id: string) => void;
+  onOpenFinder: () => void;
   state: StudioState;
 };
 
-export function Sidebar({ count, tags, selectedId, onSelect, state }: Props) {
+export function Sidebar({ count, tags, selectedId, onSelect, onOpenFinder, state }: Props) {
   const { resolvedTheme, setTheme } = useTheme();
+  const t = useT();
 
   return (
     <aside className="flex h-dvh w-[248px] shrink-0 flex-col border-sidebar-border border-r bg-sidebar">
-      <div className="flex items-center justify-between px-4 pt-4 pb-3">
-        <span className="font-semibold text-[15px] tracking-tight">open-recording</span>
-        <button
-          type="button"
-          onClick={() => setTheme(resolvedTheme === 'dark' ? 'light' : 'dark')}
-          className="grid size-7 place-items-center rounded-[6px] text-muted-foreground hover:bg-sidebar-accent hover:text-foreground"
-          aria-label="Toggle theme"
-        >
-          {resolvedTheme === 'dark' ? <Sun className="size-4" /> : <Moon className="size-4" />}
-        </button>
+      <div className="flex items-center justify-between gap-1 px-4 pt-4 pb-3">
+        <span className="whitespace-nowrap font-semibold text-[15px] tracking-tight">
+          open-recording
+        </span>
+        <div className="flex shrink-0 items-center gap-0.5">
+          <button
+            type="button"
+            onClick={onOpenFinder}
+            className="grid size-7 place-items-center rounded-[6px] text-muted-foreground hover:bg-sidebar-accent hover:text-foreground"
+            aria-label={t('nav.search')}
+            title={`${t('nav.search')} (⌘K)`}
+          >
+            <Search className="size-3.5" />
+          </button>
+          <LanguageMenu />
+          <button
+            type="button"
+            onClick={() => setTheme(resolvedTheme === 'dark' ? 'light' : 'dark')}
+            className="grid size-7 place-items-center rounded-[6px] text-muted-foreground hover:bg-sidebar-accent hover:text-foreground"
+            aria-label={t('nav.theme')}
+            title={t('nav.theme')}
+          >
+            {resolvedTheme === 'dark' ? <Sun className="size-4" /> : <Moon className="size-4" />}
+          </button>
+        </div>
       </div>
 
       <nav className="space-y-0.5 px-2">
         <NavRow
           icon="🎙️"
-          label="Recordings"
+          label={t('nav.recordings')}
           count={count}
           selected={selectedId === ALL_ID}
           onSelect={() => onSelect(ALL_ID)}
         />
         <NavRow
           icon="⚙️"
-          label="Setup"
+          label={t('nav.setup')}
           selected={selectedId === SETUP_ID}
           onSelect={() => onSelect(SETUP_ID)}
         />
@@ -82,7 +101,7 @@ export function Sidebar({ count, tags, selectedId, onSelect, state }: Props) {
 
       {tags.length > 0 ? (
         <>
-          <p className="eyebrow mt-6 mb-2 px-4">Tags</p>
+          <p className="eyebrow mt-6 mb-2 px-4">{t('nav.tags')}</p>
           <nav className="space-y-0.5 overflow-y-auto px-2">
             {tags.map((tag) => (
               <NavRow
@@ -108,7 +127,7 @@ export function Sidebar({ count, tags, selectedId, onSelect, state }: Props) {
                 state.connected ? 'bg-emerald-500' : 'bg-muted-foreground',
               )}
             />
-            {state.connected ? 'connected' : 'offline'}
+            {state.connected ? t('nav.connected') : t('nav.offline')}
           </span>
         </div>
       </div>

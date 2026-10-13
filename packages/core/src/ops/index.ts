@@ -6,6 +6,7 @@
  */
 
 export type {
+  Bookmark,
   RecordingMeta,
   RecordingStatus,
   Transcript,
@@ -13,11 +14,22 @@ export type {
 } from '../files/store.ts';
 export type { RecorderState, RecorderStatus } from '../recorder/hub.ts';
 export type { WhisperEnvironment } from '../stt/whisper.ts';
-export { formatTimestamp } from '../stt/whisper.ts';
+export { applyVocabulary, formatTimestamp } from '../stt/whisper.ts';
 export { type ApiContext, type ApiContextOptions, makeContext, OpsError } from './context.ts';
 export {
+  type CurrentRecordingState,
+  readCurrent,
+  writeCurrent,
+} from './current.ts';
+export {
+  type ImportRecordingOptions,
+  importRecording,
+} from './import.ts';
+export {
+  addBookmark,
   type Download,
   type DownloadKind,
+  deleteBookmark,
   deleteRecording,
   downloadPath,
   listRecordings,
@@ -36,6 +48,7 @@ export {
 } from './recordings.ts';
 export {
   cancelRecording,
+  markRecordingMoment,
   pauseRecording,
   type RepairResult,
   reapAbandoned,
@@ -48,6 +61,7 @@ export {
 } from './session.ts';
 export {
   editTranscriptSegment,
+  type SegmentPatch,
   type TranscribeOptions,
   type TranscribeResult,
   transcribeEnvironment,

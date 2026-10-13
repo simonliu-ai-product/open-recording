@@ -3,8 +3,12 @@ import { stat } from 'node:fs/promises';
 import type { ViteDevServer } from 'vite';
 import { validateMutationRequest } from '../../http/request-guard.ts';
 import type { ApiContext } from '../../ops/context.ts';
+import { readCurrent, writeCurrent } from '../../ops/current.ts';
+import { importRecording } from '../../ops/import.ts';
 import {
+  addBookmark,
   type DownloadKind,
+  deleteBookmark,
   deleteRecording,
   downloadPath,
   listRecordings,
@@ -20,33 +24,21 @@ import {
 } from '../../ops/recordings.ts';
 import {
   cancelRecording,
+  markRecordingMoment,
   pauseRecording,
   recorderStatus,
   resumeRecording,
   startRecording,
   stopRecording,
 } from '../../ops/session.ts';
-import { transcribeEnvironment, transcribeRecording } from '../../ops/transcribe.ts';
-import { fail, json, readBody } from './context.ts';
+import {
+  editTranscriptSegment,
+  transcribeEnvironment,
+  transcribeRecording,
+} from '../../ops/transcribe.ts';
+import { fail, json, readBody, readRawBody } from './context.ts';
 
-// GET    /__rec/status                 recorder state machine snapshot
-// GET    /__rec/environment            whisper + ffmpeg availability
-// POST   /__rec/start                  { title?, tags?, note? }
-// POST   /__rec/pause
-// POST   /__rec/resume
-// POST   /__rec/stop
-// POST   /__rec/cancel
-// GET    /__rec/search?q=&limit=      substring search across transcripts
-// GET    /__rec/recordings             list
-// GET    /__rec/recordings/:id         meta
-// GET    /__rec/recordings/:id/audio   the captured webm, with byte ranges so it seeks
-// GET    /__rec/recordings/:id/subtitles.vtt  cues a <video> can load directly
-// GET    /__rec/recordings/:id/download/:kind  media|transcript|srt|vtt|segments, as a file
-// GET    /__rec/recordings/:id/transcript?view=markdown|text|segments
-// GET    /__rec/recordings/:id/notes       agent-written Markdown beside the audio
-// POST   /__rec/recordings/:id/transcribe  { language?, model?, force? }
-// PATCH  /__rec/recordings/:id         { title?, tags?, notes? }
-// DELETE /__rec/recordings/:id
+const MAX_IMPORT_BYTES = 200 * 1024 * 1024;
 
 export function registerRecordingRoutes(server: ViteDevServer, ctx: ApiContext): void {
   server.middlewares.use('/__rec', async (req, res, next) => {
@@ -62,7 +54,33 @@ export function registerRecordingRoutes(server: ViteDevServer, ctx: ApiContext):
         return json(res, 200, await transcribeEnvironment(ctx));
       }
 
-      const CONTROL = ['/start', '/pause', '/resume', '/stop', '/cancel'];
+      if (url.pathname === '/current') {
+        if (method === 'GET') {
+          return json(res, 200, await readCurrent(ctx));
+        }
+        if (method === 'POST') {
+          const guard = validateMutationRequest(req, { requireJsonBody: true });
+          if (!guard.ok) return json(res, guard.status, { error: guard.error });
+          const body = (await readBody(req)) as {
+            recordingId?: string | null;
+            title?: string;
+            currentTimeMs?: number;
+          };
+          return json(
+            res,
+            200,
+            await writeCurrent(ctx, {
+              recordingId: body.recordingId ?? null,
+              ...(body.title ? { title: body.title } : {}),
+              ...(typeof body.currentTimeMs === 'number'
+                ? { currentTimeMs: body.currentTimeMs }
+                : {}),
+            }),
+          );
+        }
+      }
+
+      const CONTROL = ['/start', '/pause', '/resume', '/stop', '/cancel', '/mark'];
       if (method === 'POST' && CONTROL.includes(url.pathname)) {
         const guard = validateMutationRequest(req);
         if (!guard.ok) return json(res, guard.status, { error: guard.error });
@@ -71,6 +89,10 @@ export function registerRecordingRoutes(server: ViteDevServer, ctx: ApiContext):
         if (url.pathname === '/resume') return json(res, 200, await resumeRecording(ctx));
         if (url.pathname === '/stop') return json(res, 200, await stopRecording(ctx));
         if (url.pathname === '/cancel') return json(res, 200, await cancelRecording(ctx));
+        if (url.pathname === '/mark') {
+          const body = (await readBody(req)) as { label?: string };
+          return json(res, 200, await markRecordingMoment(ctx, body.label));
+        }
 
         const body = (await readBody(req)) as { title?: string; tags?: string[]; note?: string };
         return json(
@@ -80,6 +102,46 @@ export function registerRecordingRoutes(server: ViteDevServer, ctx: ApiContext):
             ...(body.title ? { title: body.title } : {}),
             ...(Array.isArray(body.tags) ? { tags: body.tags } : {}),
             ...(body.note ? { note: body.note } : {}),
+            source: 'studio',
+          }),
+        );
+      }
+
+      if (method === 'POST' && url.pathname === '/import') {
+        const guard = validateMutationRequest(req);
+        if (!guard.ok) return json(res, guard.status, { error: guard.error });
+        const contentType = String(req.headers['content-type'] ?? '');
+        if (contentType.includes('application/json')) {
+          const body = (await readBody(req)) as {
+            filePath?: string;
+            title?: string;
+            tags?: string[];
+            note?: string;
+            transcribe?: boolean;
+          };
+          return json(
+            res,
+            200,
+            await importRecording(ctx, {
+              ...(body.filePath ? { filePath: body.filePath } : {}),
+              ...(body.title ? { title: body.title } : {}),
+              ...(Array.isArray(body.tags) ? { tags: body.tags } : {}),
+              ...(body.note ? { note: body.note } : {}),
+              ...(body.transcribe ? { transcribe: body.transcribe } : {}),
+              source: 'studio',
+            }),
+          );
+        }
+        const bytes = await readRawBody(req, MAX_IMPORT_BYTES);
+        const filename = url.searchParams.get('filename') ?? 'imported.webm';
+        const title = url.searchParams.get('title') ?? undefined;
+        return json(
+          res,
+          200,
+          await importRecording(ctx, {
+            bytes,
+            filename,
+            ...(title ? { title } : {}),
             source: 'studio',
           }),
         );
@@ -167,14 +229,63 @@ export function registerRecordingRoutes(server: ViteDevServer, ctx: ApiContext):
       }
 
       const transcriptMatch = url.pathname.match(/^\/recordings\/([^/]+)\/transcript$/);
-      if (method === 'GET' && transcriptMatch) {
-        const view = url.searchParams.get('view');
-        const result = await readTranscript(
-          ctx,
-          decodeURIComponent(transcriptMatch[1]),
-          view === 'text' || view === 'segments' ? view : 'markdown',
-        );
-        return json(res, 200, typeof result === 'string' ? { text: result } : result);
+      if (transcriptMatch) {
+        const id = decodeURIComponent(transcriptMatch[1]);
+        if (method === 'GET') {
+          const view = url.searchParams.get('view');
+          const result = await readTranscript(
+            ctx,
+            id,
+            view === 'text' || view === 'segments' ? view : 'markdown',
+          );
+          return json(res, 200, typeof result === 'string' ? { text: result } : result);
+        }
+        if (method === 'PATCH') {
+          const guard = validateMutationRequest(req, { requireJsonBody: true });
+          if (!guard.ok) return json(res, guard.status, { error: guard.error });
+          const body = (await readBody(req)) as {
+            index?: number;
+            text?: string;
+            speaker?: string | null;
+            starred?: boolean;
+          };
+          if (typeof body.index !== 'number') {
+            return json(res, 400, { error: 'index is required' });
+          }
+          return json(
+            res,
+            200,
+            await editTranscriptSegment(ctx, id, body.index, {
+              ...(body.text !== undefined ? { text: body.text } : {}),
+              ...(body.speaker !== undefined ? { speaker: body.speaker } : {}),
+              ...(body.starred !== undefined ? { starred: body.starred } : {}),
+            }),
+          );
+        }
+      }
+
+      const bookmarksMatch = url.pathname.match(/^\/recordings\/([^/]+)\/bookmarks(?:\/([^/]+))?$/);
+      if (bookmarksMatch) {
+        const id = decodeURIComponent(bookmarksMatch[1]);
+        const bookmarkId = bookmarksMatch[2] ? decodeURIComponent(bookmarksMatch[2]) : null;
+        if (method === 'POST' && !bookmarkId) {
+          const guard = validateMutationRequest(req, { requireJsonBody: true });
+          if (!guard.ok) return json(res, guard.status, { error: guard.error });
+          const body = (await readBody(req)) as { atMs?: number; label?: string };
+          return json(
+            res,
+            200,
+            await addBookmark(ctx, id, {
+              atMs: Number(body.atMs ?? 0),
+              label: String(body.label ?? 'Bookmark'),
+            }),
+          );
+        }
+        if (method === 'DELETE' && bookmarkId) {
+          const guard = validateMutationRequest(req);
+          if (!guard.ok) return json(res, guard.status, { error: guard.error });
+          return json(res, 200, await deleteBookmark(ctx, id, bookmarkId));
+        }
       }
 
       const notesMatch = url.pathname.match(/^\/recordings\/([^/]+)\/notes$/);
@@ -189,6 +300,7 @@ export function registerRecordingRoutes(server: ViteDevServer, ctx: ApiContext):
         const body = (await readBody(req)) as {
           language?: string;
           model?: string;
+          vocabulary?: string[];
           force?: boolean;
         };
         return json(
@@ -197,6 +309,7 @@ export function registerRecordingRoutes(server: ViteDevServer, ctx: ApiContext):
           await transcribeRecording(ctx, decodeURIComponent(transcribeMatch[1]), {
             ...(body.language ? { language: body.language } : {}),
             ...(body.model ? { model: body.model } : {}),
+            ...(Array.isArray(body.vocabulary) ? { vocabulary: body.vocabulary } : {}),
             ...(body.force ? { force: body.force } : {}),
           }),
         );

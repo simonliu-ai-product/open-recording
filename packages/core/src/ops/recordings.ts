@@ -211,6 +211,38 @@ export async function deleteRecording(ctx: ApiContext, id: string): Promise<{ ok
   return { ok: true };
 }
 
+export async function addBookmark(
+  ctx: ApiContext,
+  id: string,
+  input: { atMs: number; label: string },
+): Promise<RecordingMeta> {
+  const meta = await readRecording(ctx, id);
+  const label = input.label.trim() || 'Bookmark';
+  const atMs = Math.max(0, Math.round(input.atMs));
+  const bookmark = {
+    id: `bm-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 6)}`,
+    atMs,
+    label,
+    createdAt: new Date().toISOString(),
+  };
+  const bookmarks = [...(meta.bookmarks ?? []), bookmark].sort((a, b) => a.atMs - b.atMs);
+  const next = await patchMeta(ctx, id, { bookmarks });
+  if (!next) throw new OpsError(404, `recording not found: ${id}`);
+  return next;
+}
+
+export async function deleteBookmark(
+  ctx: ApiContext,
+  id: string,
+  bookmarkId: string,
+): Promise<RecordingMeta> {
+  const meta = await readRecording(ctx, id);
+  const bookmarks = (meta.bookmarks ?? []).filter((b) => b.id !== bookmarkId);
+  const next = await patchMeta(ctx, id, { bookmarks });
+  if (!next) throw new OpsError(404, `recording not found: ${id}`);
+  return next;
+}
+
 export type TranscriptHit = {
   id: string;
   title: string;
@@ -218,6 +250,8 @@ export type TranscriptHit = {
   /** Milliseconds into the recording, so a hit can be played back. */
   start: number;
   text: string;
+  speaker?: string;
+  starred?: boolean;
 };
 
 /** Plain substring search over stored transcripts — no index, because the corpus is one person's recordings. */
@@ -236,13 +270,16 @@ export async function searchTranscripts(
     const transcript = await readTranscriptFile(ctx, id);
     if (!transcript) continue;
     for (const segment of transcript.segments) {
-      if (!segment.text.toLowerCase().includes(needle)) continue;
+      const hay = `${segment.speaker ?? ''} ${segment.text}`.toLowerCase();
+      if (!hay.includes(needle)) continue;
       hits.push({
         id,
         title: meta.title,
         createdAt: meta.createdAt,
         start: segment.start,
         text: segment.text,
+        ...(segment.speaker ? { speaker: segment.speaker } : {}),
+        ...(segment.starred ? { starred: segment.starred } : {}),
       });
       if (hits.length >= limit) return hits;
     }

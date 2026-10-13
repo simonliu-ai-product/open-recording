@@ -1,5 +1,17 @@
 # @open-recording/core
 
+## 0.3.0
+
+### Minor Changes
+
+- Interactive transcript player & studio enhancements:
+  - **Click-to-seek & deep-link timestamps (`/r/:id?t=<ms>`)**: Click any transcript line timestamp or bookmark chip to jump the audio/video player directly to that moment, with active segment highlighting synced to playback and `1×` / `1.25×` / `1.5×` / `2×` playback speed controls.
+  - **Inline title & notes editing + one-click copy**: Rename recordings inline, edit `notes.md` directly in the browser studio, and copy notes or transcripts in one click.
+  - **Live & post-recording bookmarks (`Bookmark`)**: Mark key moments while recording/paused (`POST /__rec/mark`) or at the current playhead on the recording detail page (`POST / DELETE /__rec/recordings/:id/bookmarks`).
+  - **Speaker badges & starred (`★`) transcript lines**: Label speakers and star important segments on any transcript line (synced across `transcript.json`, `.md`, `.srt`, and `.vtt`), with an `All | ★ Starred` filter and missing `PATCH /__rec/recordings/:id/transcript` route wired up.
+  - **External audio/video import & Whisper vocabulary**: Import `.mp3`, `.m4a`, `.wav`, `.mp4`, `.mov`, `.webm` via drag-and-drop or the `Import` button in Studio, CLI (`open-recording import`), or MCP (`import_recording`), and normalize domain terms with `transcribe.vocabulary`.
+  - **5-locale UI (`en`, `zh-TW`, `zh-CN`, `ja`, `ko`), Global Command Palette (`⌘K`), active recording tracking (`current.json`), and Agent Skills**: Switch UI languages live, jump anywhere with `⌘K`, track the currently viewed recording & playhead, and scaffold workspace configs & skills via `open-recording init` and `open-recording sync-skills`.
+
 ## 0.2.1
 
 ### Patch Changes

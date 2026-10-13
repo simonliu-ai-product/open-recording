@@ -1,5 +1,19 @@
 # @open-recording/mcp
 
+## 0.3.0
+
+### Minor Changes
+
+- Add 6 new MCP tools and vocabulary support:
+  - `current_recording`: Read the recording currently open in the browser Studio and its playhead timestamp.
+  - `mark_moment`: Drop a timestamped bookmark onto the active recording session.
+  - `import_recording`: Import an external audio or video file from disk into `recordings/`, with optional immediate transcription.
+  - `edit_transcript_segment`: Update a segment's text, `speaker` label, or `starred` flag and regenerate `.md`, `.srt`, and `.vtt`.
+  - `add_bookmark` / `delete_bookmark`: Manage timestamped bookmarks on any recording.
+  - `transcribe_recording`: Support `vocabulary` (`string[]`) for domain terms and proper nouns.
+- Updated dependencies:
+  - `@open-recording/core@0.3.0`
+
 ## 0.2.0
 
 ### Minor Changes

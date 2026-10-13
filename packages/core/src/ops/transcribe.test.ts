@@ -2,7 +2,10 @@ import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
+import { applyVocabulary } from '../stt/whisper.ts';
 import { makeContext } from './context.ts';
+import { readCurrent, writeCurrent } from './current.ts';
+import { addBookmark, deleteBookmark } from './recordings.ts';
 import { editTranscriptSegment } from './transcribe.ts';
 
 const workspaces: string[] = [];
@@ -55,6 +58,20 @@ describe('editTranscriptSegment', () => {
     expect(JSON.parse(await read(at, 'transcript.json')).text).toContain('AI Agent 如何實作');
   });
 
+  it('supports speaker and starred flags on a segment and reflects them in markdown/subtitles', async () => {
+    const { ctx, id, at } = await transcribed();
+
+    const next = await editTranscriptSegment(ctx, id, 0, {
+      speaker: 'Simon',
+      starred: true,
+    });
+
+    expect(next.segments[0].speaker).toBe('Simon');
+    expect(next.segments[0].starred).toBe(true);
+    expect(await read(at, 'transcript.md')).toContain('`00:00` ★ **[Simon]** 大家好我是Simon');
+    expect(await read(at, 'transcript.srt')).toContain('Simon: 大家好我是Simon');
+  });
+
   it('keeps the timings, which the correction has nothing to do with', async () => {
     const { ctx, id } = await transcribed();
     const next = await editTranscriptSegment(ctx, id, 0, 'Hello, I am Simon');
@@ -75,5 +92,41 @@ describe('editTranscriptSegment', () => {
   it('refuses when there is no transcript to correct', async () => {
     const { ctx } = await transcribed();
     await expect(editTranscriptSegment(ctx, 'nope', 0, 'x')).rejects.toThrow(/not found/);
+  });
+});
+
+describe('applyVocabulary', () => {
+  it('normalizes casing of domain terms and proper nouns', () => {
+    const out = applyVocabulary('we connected opencc-js and whisper.cpp to the mcp server', [
+      'OpenCC-JS',
+      'whisper.cpp',
+      'MCP',
+    ]);
+    expect(out).toBe('we connected OpenCC-JS and whisper.cpp to the MCP server');
+  });
+});
+
+describe('bookmarks & current state', () => {
+  it('adds, sorts, and deletes bookmarks on a recording', async () => {
+    const { ctx, id } = await transcribed();
+    await addBookmark(ctx, id, { atMs: 12000, label: 'Second' });
+    const withTwo = await addBookmark(ctx, id, { atMs: 3000, label: 'First' });
+    expect(withTwo.bookmarks?.map((b) => b.label)).toEqual(['First', 'Second']);
+
+    const firstId = withTwo.bookmarks?.[0]?.id ?? '';
+    const afterDelete = await deleteBookmark(ctx, id, firstId);
+    expect(afterDelete.bookmarks?.map((b) => b.label)).toEqual(['Second']);
+  });
+
+  it('persists and reads active recording + playhead in current.json', async () => {
+    const { ctx, id } = await transcribed();
+    expect(await readCurrent(ctx)).toMatchObject({
+      recordingId: null,
+    });
+
+    const written = await writeCurrent(ctx, { recordingId: id, currentTimeMs: 4200 });
+    expect(written.recordingId).toBe(id);
+    expect(written.currentTimeMs).toBe(4200);
+    expect(await readCurrent(ctx)).toMatchObject({ recordingId: id, currentTimeMs: 4200 });
   });
 });

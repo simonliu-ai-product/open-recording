@@ -23,7 +23,8 @@ export function toSrt(transcript: Transcript): string {
   return `${transcript.segments
     .map((segment, i) => {
       const end = cueEnd(segment, transcript.segments[i + 1]);
-      return `${i + 1}\n${stamp(segment.start, ',')} --> ${stamp(end, ',')}\n${segment.text}\n`;
+      const line = segment.speaker ? `${segment.speaker}: ${segment.text}` : segment.text;
+      return `${i + 1}\n${stamp(segment.start, ',')} --> ${stamp(end, ',')}\n${line}\n`;
     })
     .join('\n')}`;
 }
@@ -31,7 +32,8 @@ export function toSrt(transcript: Transcript): string {
 export function toVtt(transcript: Transcript): string {
   const cues = transcript.segments.map((segment, i) => {
     const end = cueEnd(segment, transcript.segments[i + 1]);
-    return `${stamp(segment.start, '.')} --> ${stamp(end, '.')}\n${segment.text}\n`;
+    const line = segment.speaker ? `${segment.speaker}: ${segment.text}` : segment.text;
+    return `${stamp(segment.start, '.')} --> ${stamp(end, '.')}\n${line}\n`;
   });
   return `WEBVTT\n\n${cues.join('\n')}`;
 }

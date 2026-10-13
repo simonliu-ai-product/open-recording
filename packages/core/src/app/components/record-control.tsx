@@ -1,6 +1,7 @@
-import { ChevronDown, Mic, Monitor, Pause, Play, Square, X } from 'lucide-react';
+import { Bookmark, ChevronDown, Mic, Monitor, Pause, Play, Square, X } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { api, formatDuration } from '../lib/api';
+import { useT } from '../lib/i18n';
 import { type CaptureKind, type StudioState, studio } from '../lib/studio';
 import { cn } from '../lib/utils';
 
@@ -12,11 +13,6 @@ type Props = {
 /** Twelve bars, centre-weighted, so the meter reads as listening rather than loading. */
 const BARS = Array.from({ length: 12 }, (_, i) => ({ id: i, weight: 1 - Math.abs(i - 5.5) / 8 }));
 
-const SOURCES: Array<{ kind: CaptureKind; label: string; icon: typeof Mic }> = [
-  { kind: 'audio', label: 'Microphone', icon: Mic },
-  { kind: 'screen', label: 'A browser tab', icon: Monitor },
-];
-
 const REMEMBERED = 'open-recording:source';
 
 function remembered(): CaptureKind {
@@ -24,12 +20,20 @@ function remembered(): CaptureKind {
 }
 
 export function RecordControl({ state, onChanged }: Props) {
+  const t = useT();
   const [title, setTitle] = useState('');
+  const [markLabel, setMarkLabel] = useState('');
+  const [lastMarked, setLastMarked] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [elapsed, setElapsed] = useState(0);
   const [menuOpen, setMenuOpen] = useState(false);
   const [source, setSource] = useState<CaptureKind>(remembered);
+
+  const SOURCES: Array<{ kind: CaptureKind; label: string; icon: typeof Mic }> = [
+    { kind: 'audio', label: t('record.sourceMic'), icon: Mic },
+    { kind: 'screen', label: t('record.sourceTab'), icon: Monitor },
+  ];
 
   const recording = state.recorder.status === 'recording';
   const paused = state.recorder.status === 'paused';
@@ -39,18 +43,15 @@ export function RecordControl({ state, onChanged }: Props) {
   const startedAt = state.recorder.startedAt;
   const capturedMs = state.recorder.durationMs;
 
-  // What is actually in hand wins over what was picked: a tab already being
-  // shared should not be described as a microphone.
   const current = held ? state.capture : source;
   const chosen = SOURCES.find((s) => s.kind === current) ?? SOURCES[0];
 
   useEffect(() => {
     if (!open || !startedAt) {
       setElapsed(0);
+      setLastMarked(null);
       return;
     }
-    // Paused time is not in the file, so the clock stops with the recorder and
-    // shows the last figure the studio reported.
     if (paused) {
       setElapsed(capturedMs);
       return;
@@ -76,11 +77,6 @@ export function RecordControl({ state, onChanged }: Props) {
     }
   };
 
-  /**
-   * Taking a source happens inside the click: a permission prompt and Chrome's
-   * tab picker both need a user gesture, and neither can be answered by an
-   * agent. Everything after that — start, pause, stop — can be.
-   */
   const take = async (kind: CaptureKind, deviceId?: string) => {
     if (kind === 'screen') await studio.armScreen();
     else await studio.arm(deviceId);
@@ -98,16 +94,26 @@ export function RecordControl({ state, onChanged }: Props) {
       setSource(kind);
       localStorage.setItem(REMEMBERED, kind);
       setMenuOpen(false);
-      // Taken now rather than at the next record: this click is a gesture
-      // Chrome trusts, and choosing a source is a clear enough intent to act on.
       await take(kind);
     });
+
+  const markMoment = async () => {
+    try {
+      const label = markLabel.trim() || undefined;
+      await api.markMoment(label);
+      setMarkLabel('');
+      setLastMarked(formatDuration(elapsed));
+      onChanged();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+    }
+  };
 
   const SourceIcon = chosen.icon;
 
   return (
     <section className="rounded-[8px] border border-hairline bg-card p-4 shadow-edge">
-      <div className="flex items-center gap-4">
+      <div className="flex flex-wrap items-center gap-4">
         <div className="relative flex shrink-0 items-center">
           <button
             type="button"
@@ -121,7 +127,7 @@ export function RecordControl({ state, onChanged }: Props) {
                   ? 'bg-brand/70 text-brand-foreground'
                   : 'bg-primary text-primary-foreground hover:opacity-90',
             )}
-            aria-label={open ? 'Stop recording' : 'Start recording'}
+            aria-label={open ? t('record.stop') : t('record.start')}
           >
             {open ? <Square className="size-4 fill-current" /> : <Mic className="size-5" />}
           </button>
@@ -131,7 +137,7 @@ export function RecordControl({ state, onChanged }: Props) {
               type="button"
               onClick={() => setMenuOpen((was) => !was)}
               onBlur={() => window.setTimeout(() => setMenuOpen(false), 120)}
-              aria-label="Choose what to record"
+              aria-label={t('record.chooseSource')}
               aria-expanded={menuOpen}
               className="-ml-1.5 grid size-6 place-items-center rounded-full border border-border bg-background text-muted-foreground hover:text-foreground"
             >
@@ -165,13 +171,9 @@ export function RecordControl({ state, onChanged }: Props) {
                 );
               })}
 
-              {/* A named input only appears once permission has been given —
-                  before that the browser will not say what anything is called.
-                  A virtual device shows up here like any other, which is how a
-                  workspace records what the machine is playing. */}
               {state.devices.length > 1 && current === 'audio' ? (
                 <>
-                  <p className="eyebrow mt-1.5 mb-1 px-2">Input</p>
+                  <p className="eyebrow mt-1.5 mb-1 px-2">{t('record.input')}</p>
                   {state.devices.map((device) => (
                     <button
                       key={device.id}
@@ -207,7 +209,7 @@ export function RecordControl({ state, onChanged }: Props) {
                 {formatDuration(elapsed)}
                 {paused ? (
                   <span className="rounded-[3px] bg-muted px-1.5 py-0.5 font-medium text-[10px] text-muted-foreground uppercase tracking-widest">
-                    Paused
+                    {t('record.paused')}
                   </span>
                 ) : null}
               </p>
@@ -219,7 +221,7 @@ export function RecordControl({ state, onChanged }: Props) {
             <input
               value={title}
               onChange={(e) => setTitle(e.target.value)}
-              placeholder={pending ? 'Waiting for the studio…' : 'Title (optional)'}
+              placeholder={pending ? t('record.waitingStudio') : t('record.titlePlaceholder')}
               className="h-8 w-full rounded-[6px] border border-border bg-background px-2.5 text-[12.5px] outline-none placeholder:text-muted-foreground/70 focus-visible:border-foreground/40"
             />
           )}
@@ -245,48 +247,68 @@ export function RecordControl({ state, onChanged }: Props) {
         </div>
 
         {open ? (
-          <>
+          <div className="flex flex-wrap items-center gap-2">
+            <div className="flex items-center rounded-[6px] border border-border bg-background">
+              <input
+                value={markLabel}
+                onChange={(e) => setMarkLabel(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') {
+                    e.preventDefault();
+                    void markMoment();
+                  }
+                }}
+                placeholder={t('record.markPlaceholder')}
+                className="h-7 w-28 bg-transparent px-2 text-[12px] outline-none placeholder:text-muted-foreground/70"
+              />
+              <button
+                type="button"
+                onClick={() => void markMoment()}
+                className="flex h-7 items-center gap-1 whitespace-nowrap border-border border-l px-2 font-medium text-[12px] hover:bg-muted"
+              >
+                <Bookmark className="size-3 text-brand" />
+                {t('record.mark')}
+              </button>
+            </div>
             <button
               type="button"
               disabled={busy || pending}
               onClick={() => act(() => (paused ? api.resume() : api.pause()))}
-              className="flex items-center gap-1.5 rounded-[6px] border border-border px-2.5 py-1.5 font-medium text-[12px] hover:bg-muted disabled:opacity-50"
+              className="flex items-center gap-1.5 whitespace-nowrap rounded-[6px] border border-border px-2.5 py-1.5 font-medium text-[12px] hover:bg-muted disabled:opacity-50"
             >
               {paused ? <Play className="size-3.5" /> : <Pause className="size-3.5" />}
-              {paused ? 'Resume' : 'Pause'}
+              {paused ? t('record.resume') : t('record.pause')}
             </button>
             <button
               type="button"
               disabled={busy}
               onClick={() => act(() => api.cancel())}
-              className="flex items-center gap-1.5 rounded-[6px] px-2 py-1.5 text-[12px] text-muted-foreground hover:bg-muted hover:text-foreground"
+              className="flex items-center gap-1.5 whitespace-nowrap rounded-[6px] px-2 py-1.5 text-[12px] text-muted-foreground hover:bg-muted hover:text-foreground"
             >
               <X className="size-3.5" />
-              Discard
+              {t('record.discard')}
             </button>
-          </>
+          </div>
         ) : null}
       </div>
 
-      {/* One status line, where the recording is: what is in hand, and who else
-          could take it instead. */}
       <p className="folio mt-3 flex flex-wrap items-center gap-x-1.5">
         <SourceIcon className="size-3 shrink-0" />
         {held
           ? current === 'screen'
-            ? 'Sharing a tab'
-            : 'Microphone ready'
-          : `${chosen.label} — taken when you press record`}
+            ? t('record.sharingTab')
+            : t('record.micReady')
+          : t('record.takenWhenRecord', { source: chosen.label })}
         {state.recorder.studios > 1 ? (
-          <span>· {state.recorder.studios} studio tabs open</span>
+          <span>{t('record.studioTabsOpen', { count: state.recorder.studios })}</span>
+        ) : null}
+        {lastMarked ? (
+          <span className="text-brand">· {t('record.marked', { time: lastMarked })}</span>
         ) : null}
       </p>
 
       {held && current === 'screen' && state.captureSilent ? (
-        <p className="mt-1.5 text-[12px] text-brand">
-          This tab is shared without audio — reshare it with “Also share tab audio” to get a
-          transcript.
-        </p>
+        <p className="mt-1.5 text-[12px] text-brand">{t('record.tabSilentWarning')}</p>
       ) : null}
 
       {(error ?? state.recorder.error) ? (

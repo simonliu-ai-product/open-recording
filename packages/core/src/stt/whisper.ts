@@ -144,8 +144,26 @@ export function toMarkdown(title: string, transcript: Transcript): string {
     `- transcribed: ${transcript.createdAt}`,
     '',
   ];
-  const body = transcript.segments.map((s) => `\`${formatTimestamp(s.start)}\` ${s.text}`);
+  const body = transcript.segments.map((s) => {
+    const star = s.starred ? ' ★' : '';
+    const who = s.speaker ? ` **[${s.speaker}]**` : '';
+    return `\`${formatTimestamp(s.start)}\`${star}${who} ${s.text}`;
+  });
   return `${[...head, ...body].join('\n')}\n`;
+}
+
+export function applyVocabulary(text: string, vocabulary: string[]): string {
+  let out = text;
+  for (const term of vocabulary) {
+    const trimmed = term.trim();
+    if (!trimmed) continue;
+    const escaped = trimmed.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    // Match ASCII word boundaries when the term starts/ends with ASCII word chars.
+    const prefix = /^\w/.test(trimmed) ? '\\b' : '';
+    const suffix = /\w$/.test(trimmed) ? '\\b' : '';
+    out = out.replace(new RegExp(`${prefix}${escaped}${suffix}`, 'gi'), trimmed);
+  }
+  return out;
 }
 
 export type TranscribeFileOptions = {
@@ -155,6 +173,7 @@ export type TranscribeFileOptions = {
   userCwd: string;
   language?: string;
   model?: string;
+  vocabulary?: string[];
   /** Keep the intermediate 16 kHz WAV. Defaults to false. */
   keepWav?: boolean;
 };
@@ -192,6 +211,9 @@ export async function transcribeFile(opts: TranscribeFileOptions): Promise<Trans
   const prefix = opts.wavPath.replace(/\.wav$/, '');
   const language = opts.language ?? opts.config.language ?? 'auto';
   const script = opts.config.script ?? 'as-is';
+  const vocab = [...(opts.config.vocabulary ?? []), ...(opts.vocabulary ?? [])]
+    .map((w) => w.trim())
+    .filter(Boolean);
   const prompt = opts.config.prompt;
   // Loaded before whisper runs: a transcript that cannot be converted should
   // fail before spending a minute producing one in the wrong script.
@@ -224,9 +246,11 @@ export async function transcribeFile(opts: TranscribeFileOptions): Promise<Trans
   const jsonPath = `${prefix}.json`;
   const raw = await readFile(jsonPath, 'utf8');
   const { language: detected, segments: parsed } = parseWhisperJson(raw);
-  const segments = convert
-    ? parsed.map((segment) => ({ ...segment, text: convert(segment.text) }))
-    : parsed;
+  const segments = parsed.map((segment) => {
+    const converted = convert ? convert(segment.text) : segment.text;
+    const normalized = vocab.length > 0 ? applyVocabulary(converted, vocab) : converted;
+    return { ...segment, text: normalized };
+  });
   await unlink(jsonPath).catch(() => {});
   if (!opts.keepWav) await unlink(opts.wavPath).catch(() => {});
 

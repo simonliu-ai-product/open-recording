@@ -1,6 +1,7 @@
 import { FileText, Loader2, Monitor, StickyNote } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { formatDuration, type RecordingSummary } from '../lib/api';
+import { useLocale } from '../lib/i18n';
 
 /**
  * The tile shows the opening words of the transcript rather than a waveform:
@@ -8,6 +9,7 @@ import { formatDuration, type RecordingSummary } from '../lib/api';
  * waveform would be decoration standing in for content.
  */
 export function RecordingCard({ recording }: { recording: RecordingSummary }) {
+  const { t } = useLocale();
   return (
     <li>
       <Link to={`/r/${encodeURIComponent(recording.id)}`} className="group block">
@@ -37,7 +39,9 @@ export function RecordingCard({ recording }: { recording: RecordingSummary }) {
               {recording.preview}
             </p>
           ) : (
-            <p className="mt-3 text-[12.5px] text-muted-foreground/60 italic">Not transcribed</p>
+            <p className="mt-3 text-[12.5px] text-muted-foreground/60 italic">
+              {recording.transcribing ? t('home.transcribing') : t('home.notTranscribed')}
+            </p>
           )}
 
           {recording.tags.length > 0 ? (

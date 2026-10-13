@@ -304,3 +304,34 @@ export async function cancelRecording(ctx: ApiContext): Promise<{ ok: true; disc
   await deleteRecordingDir(ctx, id);
   return { ok: true, discarded: id };
 }
+
+/**
+ * Drops a timestamped bookmark on the open recording at the current elapsed
+ * millisecond offset.
+ */
+export async function markRecordingMoment(
+  ctx: ApiContext,
+  label = 'Highlight',
+): Promise<RecordingMeta> {
+  const hub = recorderHub(ctx.userCwd);
+  const state = hub.snapshot();
+  if ((state.status !== 'recording' && state.status !== 'paused') || !state.recordingId) {
+    throw new OpsError(409, 'nothing is being recorded');
+  }
+  const atMs =
+    state.status === 'paused' || !state.startedAt
+      ? state.durationMs
+      : Math.max(state.durationMs, Date.now() - new Date(state.startedAt).getTime());
+  const current = await readMeta(ctx, state.recordingId);
+  if (!current) throw new OpsError(404, `recording not found: ${state.recordingId}`);
+  const bookmark = {
+    id: `bm-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 6)}`,
+    atMs: Math.max(0, Math.round(atMs)),
+    label: label.trim() || 'Highlight',
+    createdAt: new Date().toISOString(),
+  };
+  const bookmarks = [...(current.bookmarks ?? []), bookmark].sort((a, b) => a.atMs - b.atMs);
+  const next = await patchMeta(ctx, state.recordingId, { bookmarks });
+  if (!next) throw new OpsError(404, `recording not found: ${state.recordingId}`);
+  return next;
+}

@@ -26,9 +26,16 @@ import { type ApiContext, OpsError } from './context.ts';
 export type TranscribeOptions = {
   language?: string;
   model?: string;
+  vocabulary?: string[];
   /** Re-run even when a transcript already exists. */
   force?: boolean;
   keepWav?: boolean;
+};
+
+export type SegmentPatch = {
+  text?: string;
+  speaker?: string | null;
+  starred?: boolean;
 };
 
 export type TranscribeResult = {
@@ -83,7 +90,7 @@ export async function editTranscriptSegment(
   ctx: ApiContext,
   id: string,
   index: number,
-  text: string,
+  input: string | SegmentPatch,
 ): Promise<Transcript> {
   const meta = await readMeta(ctx, id);
   if (!meta) throw new OpsError(404, `recording not found: ${id}`);
@@ -100,13 +107,29 @@ export async function editTranscriptSegment(
     );
   }
 
-  const trimmed = text.trim();
-  if (!trimmed)
+  const patch: SegmentPatch = typeof input === 'string' ? { text: input } : input;
+  const trimmed = patch.text !== undefined ? patch.text.trim() : undefined;
+  if (trimmed !== undefined && !trimmed) {
     throw new OpsError(400, 'a segment cannot be emptied; delete the recording instead');
+  }
 
-  const segments = transcript.segments.map((segment, i) =>
-    i === index ? { ...segment, text: trimmed } : segment,
-  );
+  const segments = transcript.segments.map((segment, i) => {
+    if (i !== index) return segment;
+    const nextSeg = {
+      ...segment,
+      ...(trimmed !== undefined ? { text: trimmed } : {}),
+    };
+    if (patch.speaker !== undefined) {
+      const spk = patch.speaker?.trim();
+      if (spk) nextSeg.speaker = spk;
+      else delete nextSeg.speaker;
+    }
+    if (patch.starred !== undefined) {
+      if (patch.starred) nextSeg.starred = true;
+      else delete nextSeg.starred;
+    }
+    return nextSeg;
+  });
   const next: Transcript = {
     ...transcript,
     segments,
@@ -162,6 +185,7 @@ export async function transcribeRecording(
       userCwd: ctx.userCwd,
       ...(opts.language ? { language: opts.language } : {}),
       ...(opts.model ? { model: opts.model } : {}),
+      ...(opts.vocabulary ? { vocabulary: opts.vocabulary } : {}),
       ...(opts.keepWav !== undefined ? { keepWav: opts.keepWav } : {}),
     });
   } catch (err) {

@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useState, useSyncExternalStore } from 'react';
 import { Outlet, useLocation, useNavigate, useSearchParams } from 'react-router-dom';
+import { CommandPalette } from '../components/command-palette';
 import { ALL_ID, SETUP_ID, Sidebar } from '../components/sidebar';
 import { api, type RecordingSummary } from '../lib/api';
 import { studio } from '../lib/studio';
@@ -25,6 +26,7 @@ export function Shell() {
   const location = useLocation();
   const [searchParams] = useSearchParams();
   const [recordings, setRecordings] = useState<RecordingSummary[] | null>(null);
+  const [finderOpen, setFinderOpen] = useState(false);
 
   const selectedId = pathToSelectedId(location.pathname, searchParams);
 
@@ -60,6 +62,25 @@ export function Shell() {
       state.recorder.status === 'recording' ? '● Recording — open-recording' : 'open-recording';
   }, [state.recorder.status]);
 
+  // Global ⌘K / Ctrl+K shortcut for CommandPalette
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key.toLowerCase() === 'k' && (e.metaKey || e.ctrlKey)) {
+        e.preventDefault();
+        setFinderOpen((v) => !v);
+      }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, []);
+
+  // Clear active recording when on Home or Setup
+  useEffect(() => {
+    if (!location.pathname.startsWith('/r/')) {
+      void api.reportCurrent({ recordingId: null }).catch(() => {});
+    }
+  }, [location.pathname]);
+
   const tags = useMemo(() => {
     const counter = new Map<string, number>();
     for (const recording of recordings ?? []) {
@@ -89,6 +110,7 @@ export function Shell() {
           tags={tags}
           selectedId={selectedId}
           onSelect={select}
+          onOpenFinder={() => setFinderOpen(true)}
           state={state}
         />
       </div>
@@ -98,6 +120,13 @@ export function Shell() {
           <Outlet context={context} />
         </div>
       </div>
+
+      <CommandPalette
+        open={finderOpen}
+        onClose={() => setFinderOpen(false)}
+        recordings={recordings ?? []}
+        tags={tags}
+      />
     </div>
   );
 }

@@ -1,4 +1,5 @@
 import { BrowserRouter, Route, Routes } from 'react-router-dom';
+import { LocaleProvider } from './lib/i18n';
 import { Home } from './routes/home';
 import { RecordingPage } from './routes/recording';
 import { SetupPage } from './routes/setup';
@@ -6,16 +7,18 @@ import { Shell } from './routes/shell';
 
 export function App() {
   return (
-    <BrowserRouter basename={import.meta.env.BASE_URL}>
-      <Routes>
-        <Route element={<Shell />}>
-          <Route path="/" element={<Home />} />
-          <Route path="/setup" element={<SetupPage />} />
-          <Route path="/r/:id" element={<RecordingPage />} />
-        </Route>
-        <Route path="*" element={<NotFound />} />
-      </Routes>
-    </BrowserRouter>
+    <LocaleProvider>
+      <BrowserRouter basename={import.meta.env.BASE_URL}>
+        <Routes>
+          <Route element={<Shell />}>
+            <Route path="/" element={<Home />} />
+            <Route path="/setup" element={<SetupPage />} />
+            <Route path="/r/:id" element={<RecordingPage />} />
+          </Route>
+          <Route path="*" element={<NotFound />} />
+        </Routes>
+      </BrowserRouter>
+    </LocaleProvider>
   );
 }
 

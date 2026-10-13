@@ -102,5 +102,34 @@ export async function run(argv: string[]): Promise<void> {
       await doctorCommand();
     });
 
+  program
+    .command('import <file>')
+    .description('Import an audio or video file (.mp3, .m4a, .wav, .mp4, .webm) into recordings/')
+    .option('-t, --title <title>', 'recording title')
+    .option('--tag <tag...>', 'tags to attach')
+    .option('--transcribe', 'transcribe immediately after importing')
+    .option('-l, --language <code>', 'language code for transcription, or `auto`')
+    .action(async (file: string, flags) => {
+      const { importCommand } = await import('./commands.ts');
+      await importCommand(file, flags);
+    });
+
+  program
+    .command('init [dir]')
+    .description('Initialize an open-recording workspace with config, CLAUDE.md, and agent skills')
+    .action(async (dir?: string) => {
+      const { initCommand } = await import('./commands.ts');
+      await initCommand(dir);
+    });
+
+  program
+    .command('sync-skills')
+    .description('Copy canonical agent skills into .claude/skills and .agents/skills')
+    .action(async () => {
+      const { syncSkillsCommand } = await import('./commands.ts');
+      const synced = await syncSkillsCommand();
+      process.stdout.write(`${chalk.green('✓')} synced ${synced.length} skills\n`);
+    });
+
   await program.parseAsync(argv, { from: 'user' });
 }

@@ -8,6 +8,8 @@ const config: OpenRecordingConfig = {
     script: 'traditional',
     // Whisper starts as soon as a recording stops.
     auto: true,
+    // Domain terms and proper nouns normalized after Whisper transcription.
+    vocabulary: ['Open-Recording', 'whisper.cpp', 'OpenCC-JS', 'Token', 'MCP', 'Claude Code'],
   },
 };
 

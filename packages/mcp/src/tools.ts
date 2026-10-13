@@ -1,11 +1,17 @@
 import type { McpServer } from '@modelcontextprotocol/server';
 import {
   type ApiContext,
+  addBookmark,
   cancelRecording,
+  deleteBookmark,
   deleteRecording,
+  editTranscriptSegment,
+  importRecording,
   listRecordings,
+  markRecordingMoment,
   OpsError,
   pauseRecording,
+  readCurrent,
   readNotes,
   readRecording,
   readSubtitles,
@@ -64,6 +70,17 @@ export function registerTools(server: McpServer, ctx: ApiContext): void {
       inputSchema: z.object({}),
     },
     () => run(() => recorderStatus(ctx)),
+  );
+
+  server.registerTool(
+    'current_recording',
+    {
+      title: 'Current recording in browser',
+      description:
+        'The recording currently open in the studio browser and its playhead position in milliseconds.',
+      inputSchema: z.object({}),
+    },
+    () => run(() => readCurrent(ctx)),
   );
 
   server.registerTool(
@@ -143,6 +160,48 @@ export function registerTools(server: McpServer, ctx: ApiContext): void {
   );
 
   server.registerTool(
+    'mark_moment',
+    {
+      title: 'Mark a moment in the open recording',
+      description:
+        'Drop a timestamped bookmark on the currently active recording at the current elapsed time.',
+      inputSchema: z.object({
+        label: z.string().optional().describe('what just happened, e.g. "Pricing decision"'),
+      }),
+    },
+    ({ label }) => run(() => markRecordingMoment(ctx, label)),
+  );
+
+  server.registerTool(
+    'import_recording',
+    {
+      title: 'Import external audio or video file',
+      description:
+        'Import an existing media file (.mp3, .m4a, .wav, .mp4, .mov, .webm) from disk into recordings/.',
+      inputSchema: z.object({
+        filePath: z.string().describe('path to the media file on disk'),
+        title: z.string().optional(),
+        tags: z.array(z.string()).optional(),
+        note: z.string().optional(),
+        transcribe: z.boolean().optional(),
+        language: z.string().optional(),
+      }),
+    },
+    ({ filePath, title, tags, note, transcribe, language }) =>
+      run(() =>
+        importRecording(ctx, {
+          filePath,
+          ...(title ? { title } : {}),
+          ...(tags ? { tags } : {}),
+          ...(note ? { note } : {}),
+          ...(transcribe ? { transcribe } : {}),
+          ...(language ? { language } : {}),
+          source: 'agent',
+        }),
+      ),
+  );
+
+  server.registerTool(
     'list_recordings',
     {
       title: 'List recordings',
@@ -176,14 +235,19 @@ export function registerTools(server: McpServer, ctx: ApiContext): void {
           .string()
           .optional()
           .describe('path to a ggml model, overriding the configured one'),
+        vocabulary: z
+          .array(z.string())
+          .optional()
+          .describe('proper nouns and acronyms to normalize across segments'),
         force: z.boolean().optional(),
       }),
     },
-    ({ id, language, model, force }) =>
+    ({ id, language, model, vocabulary, force }) =>
       run(() =>
         transcribeRecording(ctx, id, {
           ...(language ? { language } : {}),
           ...(model ? { model } : {}),
+          ...(vocabulary ? { vocabulary } : {}),
           ...(force ? { force } : {}),
         }),
       ),
@@ -201,6 +265,57 @@ export function registerTools(server: McpServer, ctx: ApiContext): void {
       }),
     },
     ({ id, view }) => run(() => readTranscript(ctx, id, view ?? 'markdown')),
+  );
+
+  server.registerTool(
+    'edit_transcript_segment',
+    {
+      title: 'Edit transcript segment',
+      description:
+        'Correct a segment’s text, set its speaker label, or star/unstar it. Rewrites Markdown, SRT, and VTT subtitles in sync.',
+      inputSchema: z.object({
+        id: z.string(),
+        index: z.number().int().nonnegative(),
+        text: z.string().optional(),
+        speaker: z.string().nullable().optional(),
+        starred: z.boolean().optional(),
+      }),
+    },
+    ({ id, index, text, speaker, starred }) =>
+      run(() =>
+        editTranscriptSegment(ctx, id, index, {
+          ...(text !== undefined ? { text } : {}),
+          ...(speaker !== undefined ? { speaker } : {}),
+          ...(starred !== undefined ? { starred } : {}),
+        }),
+      ),
+  );
+
+  server.registerTool(
+    'add_bookmark',
+    {
+      title: 'Add bookmark',
+      description: 'Add a timestamped bookmark to a recording at `atMs` milliseconds.',
+      inputSchema: z.object({
+        id: z.string(),
+        atMs: z.number().nonnegative(),
+        label: z.string(),
+      }),
+    },
+    ({ id, atMs, label }) => run(() => addBookmark(ctx, id, { atMs, label })),
+  );
+
+  server.registerTool(
+    'delete_bookmark',
+    {
+      title: 'Delete bookmark',
+      description: 'Remove a bookmark from a recording by its bookmark id.',
+      inputSchema: z.object({
+        id: z.string(),
+        bookmarkId: z.string(),
+      }),
+    },
+    ({ id, bookmarkId }) => run(() => deleteBookmark(ctx, id, bookmarkId)),
   );
 
   server.registerTool(

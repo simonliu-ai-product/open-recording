@@ -1,6 +1,7 @@
 import { ChevronDown, ChevronUp, FileText, Loader2, Mic, Monitor, StickyNote } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { formatBytes, formatDuration, type RecordingSummary } from '../lib/api';
+import { useLocale } from '../lib/i18n';
 import { cn } from '../lib/utils';
 import type { Sort, SortField } from '../routes/home';
 
@@ -58,17 +59,30 @@ function Column({
  * — which was recorded, how long, whether it has a transcript yet.
  */
 export function RecordingTable({ recordings, sort, onSort }: Props) {
+  const { t } = useLocale();
   return (
     <div className="overflow-x-auto rounded-[8px] border border-hairline bg-card">
       <table className="w-full min-w-[720px] border-collapse text-left">
         <thead>
           <tr className="border-hairline border-b">
-            <Column field="title" label="Title" sort={sort} onSort={onSort} />
-            <Column field="recorded" label="Recorded" sort={sort} onSort={onSort} />
-            <Column field="length" label="Length" sort={sort} onSort={onSort} align="right" />
-            <Column field="size" label="Size" sort={sort} onSort={onSort} align="right" />
-            <th className="eyebrow px-3 py-2.5 font-medium">Tags</th>
-            <th className="eyebrow px-4 py-2.5 text-right font-medium">Transcript</th>
+            <Column field="title" label={t('home.fieldTitle')} sort={sort} onSort={onSort} />
+            <Column field="recorded" label={t('home.fieldRecorded')} sort={sort} onSort={onSort} />
+            <Column
+              field="length"
+              label={t('home.fieldLength')}
+              sort={sort}
+              onSort={onSort}
+              align="right"
+            />
+            <Column
+              field="size"
+              label={t('home.fieldSize')}
+              sort={sort}
+              onSort={onSort}
+              align="right"
+            />
+            <th className="eyebrow px-3 py-2.5 font-medium">{t('nav.tags')}</th>
+            <th className="eyebrow px-4 py-2.5 text-right font-medium">{t('detail.transcript')}</th>
           </tr>
         </thead>
         <tbody>

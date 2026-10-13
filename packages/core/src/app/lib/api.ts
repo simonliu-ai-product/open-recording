@@ -1,3 +1,10 @@
+export type Bookmark = {
+  id: string;
+  atMs: number;
+  label: string;
+  createdAt: string;
+};
+
 export type RecordingSummary = {
   id: string;
   title: string;
@@ -20,11 +27,14 @@ export type TranscriptHit = {
   createdAt: string;
   start: number;
   text: string;
+  speaker?: string;
+  starred?: boolean;
 };
 
 export type RecordingMeta = RecordingSummary & {
   updatedAt: string;
   mimeType: string;
+  bookmarks?: Bookmark[];
   note?: string;
   error?: string;
   transcript?: {
@@ -37,7 +47,19 @@ export type RecordingMeta = RecordingSummary & {
   };
 };
 
-export type TranscriptSegment = { start: number; end: number; text: string };
+export type TranscriptSegment = {
+  start: number;
+  end: number;
+  text: string;
+  speaker?: string;
+  starred?: boolean;
+};
+
+export type SegmentPatch = {
+  text?: string;
+  speaker?: string | null;
+  starred?: boolean;
+};
 
 export type Transcript = {
   model: string;
@@ -64,8 +86,8 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   return body;
 }
 
-const jsonInit = (body: unknown): RequestInit => ({
-  method: 'POST',
+const jsonInit = (body: unknown, method = 'POST'): RequestInit => ({
+  method,
   headers: { 'content-type': 'application/json' },
   body: JSON.stringify(body),
 });
@@ -76,33 +98,54 @@ export const api = {
     request<TranscriptHit[]>(`/__rec/search?q=${encodeURIComponent(query)}`),
   readNotes: (id: string) =>
     request<{ text: string }>(`/__rec/recordings/${encodeURIComponent(id)}/notes`),
+  writeNotes: (id: string, notes: string) =>
+    request<RecordingMeta>(
+      `/__rec/recordings/${encodeURIComponent(id)}`,
+      jsonInit({ notes }, 'PATCH'),
+    ),
   readRecording: (id: string) =>
     request<RecordingMeta>(`/__rec/recordings/${encodeURIComponent(id)}`),
   readTranscript: (id: string) =>
     request<Transcript>(`/__rec/recordings/${encodeURIComponent(id)}/transcript?view=segments`),
-  editSegment: (id: string, index: number, text: string) =>
-    request<Transcript>(`/__rec/recordings/${encodeURIComponent(id)}/transcript`, {
-      method: 'PATCH',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ index, text }),
-    }),
-  transcribe: (id: string, body: { language?: string; force?: boolean } = {}) =>
+  readTranscriptMarkdown: (id: string) =>
+    request<{ text: string }>(
+      `/__rec/recordings/${encodeURIComponent(id)}/transcript?view=markdown`,
+    ),
+  editSegment: (id: string, index: number, input: string | SegmentPatch) => {
+    const patch = typeof input === 'string' ? { text: input } : input;
+    return request<Transcript>(
+      `/__rec/recordings/${encodeURIComponent(id)}/transcript`,
+      jsonInit({ index, ...patch }, 'PATCH'),
+    );
+  },
+  addBookmark: (id: string, atMs: number, label: string) =>
+    request<RecordingMeta>(
+      `/__rec/recordings/${encodeURIComponent(id)}/bookmarks`,
+      jsonInit({ atMs, label }),
+    ),
+  deleteBookmark: (id: string, bookmarkId: string) =>
+    request<RecordingMeta>(
+      `/__rec/recordings/${encodeURIComponent(id)}/bookmarks/${encodeURIComponent(bookmarkId)}`,
+      { method: 'DELETE' },
+    ),
+  transcribe: (
+    id: string,
+    body: { language?: string; vocabulary?: string[]; force?: boolean } = {},
+  ) =>
     request<{ id: string; segmentCount: number; language: string }>(
       `/__rec/recordings/${encodeURIComponent(id)}/transcribe`,
       jsonInit(body),
     ),
   setTags: (id: string, tags: string[]) =>
-    request<RecordingMeta>(`/__rec/recordings/${encodeURIComponent(id)}`, {
-      method: 'PATCH',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ tags }),
-    }),
+    request<RecordingMeta>(
+      `/__rec/recordings/${encodeURIComponent(id)}`,
+      jsonInit({ tags }, 'PATCH'),
+    ),
   rename: (id: string, title: string) =>
-    request<RecordingMeta>(`/__rec/recordings/${encodeURIComponent(id)}`, {
-      method: 'PATCH',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ title }),
-    }),
+    request<RecordingMeta>(
+      `/__rec/recordings/${encodeURIComponent(id)}`,
+      jsonInit({ title }, 'PATCH'),
+    ),
   remove: (id: string) =>
     request<{ ok: true }>(`/__rec/recordings/${encodeURIComponent(id)}`, { method: 'DELETE' }),
   start: (body: { title?: string } = {}) => request<RecordingMeta>('/__rec/start', jsonInit(body)),
@@ -110,6 +153,20 @@ export const api = {
   resume: () => request<{ status: string }>('/__rec/resume', { method: 'POST' }),
   stop: () => request<RecordingMeta>('/__rec/stop', { method: 'POST' }),
   cancel: () => request<{ ok: true }>('/__rec/cancel', { method: 'POST' }),
+  markMoment: (label?: string) =>
+    request<RecordingMeta>('/__rec/mark', jsonInit(label ? { label } : {})),
+  importFile: async (file: File, title?: string) => {
+    const params = new URLSearchParams({ filename: file.name });
+    if (title) params.set('title', title);
+    const buffer = await file.arrayBuffer();
+    return request<RecordingMeta>(`/__rec/import?${params.toString()}`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/octet-stream' },
+      body: buffer,
+    });
+  },
+  reportCurrent: (body: { recordingId: string | null; title?: string; currentTimeMs?: number }) =>
+    request<{ recordingId: string | null }>('/__rec/current', jsonInit(body)),
   environment: () => request<WhisperEnvironment>('/__rec/environment'),
 };
 

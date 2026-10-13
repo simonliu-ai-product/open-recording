@@ -9,11 +9,21 @@ export type RecordingStatus = 'recording' | 'ready' | 'failed';
 /** What was captured: a microphone, or a browser tab with its picture. */
 export type RecordingKind = 'audio' | 'screen';
 
+export type Bookmark = {
+  id: string;
+  /** Milliseconds from the start of the recording. */
+  atMs: number;
+  label: string;
+  createdAt: string;
+};
+
 export type TranscriptSegment = {
   /** Milliseconds from the start of the recording. */
   start: number;
   end: number;
   text: string;
+  speaker?: string;
+  starred?: boolean;
 };
 
 export type Transcript = {
@@ -39,6 +49,7 @@ export type RecordingMeta = {
   /** Name of the captured file inside the recording's directory. */
   file: string;
   tags: string[];
+  bookmarks?: Bookmark[];
   /** Set while whisper is working on it, so the list can say so. */
   transcribing?: boolean;
   /** Whether the container carries a timeline a player can scrub. */

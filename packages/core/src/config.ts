@@ -25,6 +25,11 @@ export type TranscribeConfig = {
    * per-line timestamps.
    */
   prompt?: string;
+  /**
+   * Domain vocabulary and proper nouns (product names, acronyms, team names)
+   * passed to whisper and normalized across segments.
+   */
+  vocabulary?: string[];
 };
 
 export type OpenRecordingConfig = {

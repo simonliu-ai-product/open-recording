@@ -1,4 +1,9 @@
+import { existsSync } from 'node:fs';
+import { cp, mkdir, readdir, writeFile } from 'node:fs/promises';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import chalk from 'chalk';
+import { importRecording } from '../ops/import.ts';
 import {
   deleteRecording,
   listRecordings,
@@ -10,6 +15,18 @@ import { repairRecording } from '../ops/session.ts';
 import { transcribeEnvironment, transcribeRecording } from '../ops/transcribe.ts';
 import { formatTimestamp } from '../stt/whisper.ts';
 import { cliContext } from './context.ts';
+
+function packageSkillsDir(): string {
+  let dir = path.dirname(fileURLToPath(import.meta.url));
+  while (dir !== path.dirname(dir)) {
+    const candidate = path.join(dir, 'skills');
+    if (existsSync(candidate) && existsSync(path.join(dir, 'package.json'))) {
+      return candidate;
+    }
+    dir = path.dirname(dir);
+  }
+  throw new Error('open-recording: canonical skills directory not found');
+}
 
 export async function listCommand(flags: { json?: boolean } = {}): Promise<void> {
   const ctx = await cliContext();
@@ -40,6 +57,85 @@ export async function showCommand(id: string, flags: { json?: boolean } = {}): P
   }
   const markdown = await readTranscript(ctx, id, 'markdown');
   process.stdout.write(`${String(markdown)}\n`);
+}
+
+export async function importCommand(
+  file: string,
+  flags: { title?: string; tag?: string[]; transcribe?: boolean; language?: string } = {},
+): Promise<void> {
+  const ctx = await cliContext();
+  const meta = await importRecording(ctx, {
+    filePath: file,
+    ...(flags.title ? { title: flags.title } : {}),
+    ...(flags.tag && flags.tag.length > 0 ? { tags: flags.tag } : {}),
+    ...(flags.transcribe ? { transcribe: true } : {}),
+    ...(flags.language ? { language: flags.language } : {}),
+    source: 'agent',
+  });
+  process.stdout.write(
+    `${chalk.green('✓')} imported ${chalk.bold(meta.id)} (${formatTimestamp(meta.durationMs)}) — ${meta.title}\n`,
+  );
+}
+
+export async function syncSkillsCommand(targetDir = process.cwd()): Promise<string[]> {
+  const srcRoot = packageSkillsDir();
+  const entries = await readdir(srcRoot, { withFileTypes: true });
+  const skills = entries.filter((e) => e.isDirectory()).map((e) => e.name);
+  const targets = [
+    path.join(targetDir, '.claude', 'skills'),
+    path.join(targetDir, '.agents', 'skills'),
+  ];
+  for (const destRoot of targets) {
+    await mkdir(destRoot, { recursive: true });
+    for (const skill of skills) {
+      await cp(path.join(srcRoot, skill), path.join(destRoot, skill), {
+        recursive: true,
+        force: true,
+      });
+    }
+  }
+  return skills;
+}
+
+export async function initCommand(dir = '.'): Promise<void> {
+  const root = path.resolve(process.cwd(), dir);
+  await mkdir(path.join(root, 'recordings'), { recursive: true });
+  const configPath = path.join(root, 'open-recording.config.ts');
+  if (!existsSync(configPath)) {
+    await writeFile(
+      configPath,
+      [
+        "import type { OpenRecordingConfig } from '@open-recording/core';",
+        '',
+        'export default {',
+        "  recordingsDir: 'recordings',",
+        '  port: 5274,',
+        '  transcribe: {',
+        "    language: 'auto',",
+        "    vocabulary: ['open-recording', 'MCP', 'Vite', 'Whisper'],",
+        '  },',
+        '} satisfies OpenRecordingConfig;',
+        '',
+      ].join('\n'),
+      'utf8',
+    );
+  }
+  const guide = [
+    '# open-recording Workspace',
+    '',
+    '- Start studio + MCP server: `npx open-recording dev --mcp`',
+    '- Connect MCP client to `http://localhost:5274/mcp`',
+    '- Recordings live in `recordings/<id>/` (`meta.json`, `audio.webm`, `transcript.md`, `notes.md`).',
+    '',
+  ].join('\n');
+  for (const name of ['CLAUDE.md', 'AGENTS.md']) {
+    const p = path.join(root, name);
+    if (!existsSync(p)) await writeFile(p, guide, 'utf8');
+  }
+  const synced = await syncSkillsCommand(root);
+  process.stdout.write(
+    `${chalk.green('✓')} initialized open-recording workspace in ${root} (${synced.length} skills synced)\n`,
+  );
 }
 
 export async function transcribeCommand(
@@ -76,8 +172,9 @@ export async function searchCommand(query: string, flags: { limit?: number } = {
     return;
   }
   for (const hit of hits) {
+    const who = hit.speaker ? chalk.cyan(`[${hit.speaker}] `) : '';
     process.stdout.write(
-      `${chalk.bold(hit.id)} ${chalk.dim(formatTimestamp(hit.start))}  ${hit.text}\n`,
+      `${chalk.bold(hit.id)} ${chalk.dim(formatTimestamp(hit.start))}  ${who}${hit.text}\n`,
     );
   }
 }
